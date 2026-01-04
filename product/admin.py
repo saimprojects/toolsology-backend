@@ -58,6 +58,13 @@ class ProductAdmin(admin.ModelAdmin):
     ]
     ordering = ("-created_at",)
 
+    # ✅ Minimal change: notes show in admin form
+    fieldsets = (
+        (None, {"fields": ("title", "description", "notes", "price", "categories", "status")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
+    readonly_fields = ("created_at", "updated_at")
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.annotate(

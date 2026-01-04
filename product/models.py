@@ -28,6 +28,7 @@ class Category(models.Model):
 class Product(models.Model):
     title = models.CharField(max_length=255)
     description = RichTextField()
+    notes = RichTextField(blank=True, default="")
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     categories = models.ManyToManyField(Category, related_name='products')
     status = models.BooleanField(default=True)

@@ -63,6 +63,7 @@ class ProductSerializer(serializers.ModelSerializer):
     categories = CategorySerializer(many=True, read_only=True)
     plans = ProductPlanSerializer(many=True, read_only=True)
     main_image = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = Product
