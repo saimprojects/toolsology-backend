@@ -14,6 +14,10 @@ urlpatterns = [
     path('api/', include('product.urls')),
     # Sourcing storefront + reseller panel
     path('api/sourcing/', include('sourcing.urls')),
+    # Payments (methods, SMS webhook, checkout)
+    path('api/payments/', include('payments.urls')),
+    # Reseller panel (signup, wallet, purchase)
+    path('api/reseller/', include('reseller.urls')),
     # JWT authentication endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

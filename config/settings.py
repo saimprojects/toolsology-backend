@@ -70,7 +70,13 @@ INSTALLED_APPS = [
 
     "product.apps.ProductConfig",
     "sourcing.apps.SourcingConfig",
+    "payments.apps.PaymentsConfig",
+    "reseller.apps.ResellerConfig",
 ]
+
+# Shared secret the Android SMS-forwarder must send (?token=... or
+# X-Webhook-Token header) so nobody can inject fake payment SMS.
+SMS_WEBHOOK_TOKEN = os.environ.get("SMS_WEBHOOK_TOKEN", "")
 
 # =========================
 # MIDDLEWARE

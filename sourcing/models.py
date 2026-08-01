@@ -152,6 +152,10 @@ class SourcingSettings(models.Model):
         max_digits=6, decimal_places=2, default=Decimal("15.00"),
         help_text="Default markup for reseller-panel customers.",
     )
+    reseller_min_deposit = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("2000.00"),
+        help_text="Minimum wallet deposit a reseller needs to activate the panel.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

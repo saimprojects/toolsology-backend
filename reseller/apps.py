@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class ResellerConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "reseller"
+    verbose_name = "Resellers"
