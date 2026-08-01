@@ -16,6 +16,7 @@ from .serializers import PublicSourcingProductSerializer
 
 class _BaseSourcingList(ListAPIView):
     serializer_class = PublicSourcingProductSerializer
+    pagination_class = None
     audience = "retail"
     visibility_field = "show_on_retail"
 

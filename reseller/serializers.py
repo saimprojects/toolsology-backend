@@ -3,9 +3,23 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from sourcing.models import Order
+from payments.serializers import DeliveredAccountSerializer
+
 from .models import Reseller, WalletTransaction
 
 User = get_user_model()
+
+
+class ResellerOrderSerializer(serializers.ModelSerializer):
+    product_title = serializers.CharField(source="product.title", read_only=True)
+    delivered_accounts = DeliveredAccountSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = ["id", "product_title", "quantity", "status", "source",
+                  "sell_amount_pkr", "canboso_order_code", "error_message",
+                  "created_at", "delivered_accounts"]
 
 
 class RegisterSerializer(serializers.Serializer):

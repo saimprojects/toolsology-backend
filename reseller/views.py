@@ -9,11 +9,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from payments.serializers import OrderResultSerializer
 from product.models import Product
+from sourcing.models import Order
 
 from .models import WalletTransaction
 from .serializers import (
     RegisterSerializer,
     ResellerMeSerializer,
+    ResellerOrderSerializer,
     TopupSerializer,
     WalletPurchaseSerializer,
     WalletTransactionSerializer,
@@ -105,3 +107,13 @@ class TransactionsListView(ListAPIView):
     def get_queryset(self):
         reseller = get_or_create_reseller(self.request.user)
         return reseller.transactions.all()
+
+
+class OrdersListView(ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ResellerOrderSerializer
+
+    def get_queryset(self):
+        return (Order.objects.filter(user=self.request.user)
+                .select_related("product")
+                .prefetch_related("delivered_accounts"))
