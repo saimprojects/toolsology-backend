@@ -329,7 +329,11 @@ class ProductSourceLink(models.Model):
         return f"{self.product_sourcing.product.title} → {self.supplier_product}"
 
     def label(self, index: int = 1) -> str:
-        return self.display_name or f"Plan {index}"
+        # Show the bot product's own title by default (seller/bot identity stays
+        # hidden). Admin can override via display_name; fall back to "Plan N".
+        return (self.display_name
+                or (self.supplier_product.name if self.supplier_product_id else "")
+                or f"Plan {index}")
 
     def cost_pkr(self) -> Decimal | None:
         usd = self.supplier_product.usd_pricing
