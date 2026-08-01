@@ -92,7 +92,16 @@ class CanbosoClient:
 
     def __post_init__(self):
         self._session = requests.Session()
-        self._session.headers.update({"Accept": "application/json"})
+        # A browser-like User-Agent avoids some WAF/Cloudflare 403/404 pages
+        # that block plain server-to-server requests.
+        self._session.headers.update({
+            "Accept": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
+        })
         self.base_url = self.base_url.rstrip("/")
 
     # -- low level ---------------------------------------------------------
@@ -105,8 +114,11 @@ class CanbosoClient:
         try:
             data = resp.json()
         except ValueError:
+            # Not JSON — capture a snippet of the body so we can see what the
+            # server actually returned (Cloudflare page, Next.js 404, etc.).
+            snippet = " ".join((resp.text or "").split())[:200]
             raise CanbosoNetworkError(
-                f"Non-JSON response (HTTP {resp.status_code})",
+                f"Non-JSON response (HTTP {resp.status_code}): {snippet}",
                 status=resp.status_code,
             )
 

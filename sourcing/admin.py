@@ -53,7 +53,11 @@ class SupplierBotAdmin(admin.ModelAdmin):
 
     @admin.display(description="Last sync")
     def sync_status(self, obj):
-        return "⚠ " + obj.last_sync_error if obj.last_sync_error else "OK"
+        if obj.last_sync_error:
+            return "⚠ " + obj.last_sync_error
+        if not obj.last_synced:
+            return "Never synced"
+        return "OK"
 
     @admin.action(description="Sync catalogue & balance from Canboso")
     def sync_selected_bots(self, request, queryset):
