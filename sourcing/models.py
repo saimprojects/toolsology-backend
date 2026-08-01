@@ -191,6 +191,16 @@ class ProductSourcing(models.Model):
                   "always take priority and are never overwritten.",
     )
 
+    # Frontend visibility — only ticked products appear on each panel.
+    show_on_retail = models.BooleanField(
+        default=False,
+        help_text="Show this product on the public (retail) store.",
+    )
+    show_on_reseller = models.BooleanField(
+        default=False,
+        help_text="Show this product on the reseller panel (login required).",
+    )
+
     # Pricing — leave a margin blank to use the global default; set an override
     # to pin an exact PKR price regardless of bot cost.
     retail_margin_percent = models.DecimalField(
@@ -275,6 +285,23 @@ class ProductSourcing(models.Model):
     def price_for(self, buyer_type: str) -> Decimal | None:
         return (self.reseller_price() if buyer_type == "reseller"
                 else self.retail_price())
+
+    def has_own_stock(self) -> bool:
+        return self.product.stock_items.filter(is_sold=False).exists()
+
+    def has_source(self) -> bool:
+        """True if this product can actually be fulfilled (bot link or own stock)."""
+        return self.cheapest_link() is not None or self.has_own_stock()
+
+    def is_visible_for(self, buyer_type: str) -> bool:
+        """Show on a panel only if ticked, product active, priced and fulfillable."""
+        flag = self.show_on_reseller if buyer_type == "reseller" else self.show_on_retail
+        return bool(
+            flag
+            and self.product.status
+            and self.has_source()
+            and self.price_for(buyer_type) is not None
+        )
 
 
 class ProductSourceLink(models.Model):

@@ -136,14 +136,25 @@ class ProductSourceLinkInline(admin.TabularInline):
 
 @admin.register(ProductSourcing)
 class ProductSourcingAdmin(admin.ModelAdmin):
-    list_display = ("product", "auto_match_enabled", "linked_bots",
-                    "cost_pkr_display", "retail_price_display",
-                    "reseller_price_display")
-    list_filter = ("auto_match_enabled",)
+    list_display = ("product", "show_on_retail", "show_on_reseller",
+                    "auto_match_enabled", "linked_bots", "cost_pkr_display",
+                    "retail_price_display", "reseller_price_display")
+    list_editable = ("show_on_retail", "show_on_reseller", "auto_match_enabled")
+    list_filter = ("show_on_retail", "show_on_reseller", "auto_match_enabled")
     search_fields = ("product__title",)
     autocomplete_fields = ("product",)
     inlines = [ProductSourceLinkInline]
-    actions = ["run_auto_match"]
+    actions = ["run_auto_match", "show_on_both", "hide_from_both"]
+
+    @admin.action(description="Show on retail + reseller")
+    def show_on_both(self, request, queryset):
+        queryset.update(show_on_retail=True, show_on_reseller=True)
+        self.message_user(request, "Selected products are now visible on both panels.")
+
+    @admin.action(description="Hide from both panels")
+    def hide_from_both(self, request, queryset):
+        queryset.update(show_on_retail=False, show_on_reseller=False)
+        self.message_user(request, "Selected products are now hidden.")
 
     @admin.display(description="Linked bots")
     def linked_bots(self, obj):
