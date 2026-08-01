@@ -9,9 +9,14 @@ from __future__ import annotations
 
 from rest_framework import permissions
 from rest_framework.generics import ListAPIView
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+
+from product.models import Product
 
 from .models import ProductSourcing
-from .serializers import PublicSourcingProductSerializer
+from .serializers import OfferSerializer, PublicSourcingProductSerializer
 
 
 class _BaseSourcingList(ListAPIView):
@@ -50,6 +55,38 @@ class RetailProductList(_BaseSourcingList):
 
 class ResellerProductList(_BaseSourcingList):
     """Reseller panel — login (JWT) required, reseller pricing."""
+    permission_classes = [permissions.IsAuthenticated]
+    audience = "reseller"
+    visibility_field = "show_on_reseller"
+
+
+class _BaseOffers(APIView):
+    """Offers (attached bot products) for one product — bot names hidden."""
+    audience = "retail"
+    visibility_field = "show_on_retail"
+
+    def get(self, request, product_id):
+        product = get_object_or_404(Product, pk=product_id, status=True)
+        sourcing = ProductSourcing.objects.filter(product=product).first()
+        if not sourcing or not getattr(sourcing, self.visibility_field):
+            return Response([])
+        rows = [
+            {"link": link, "index": i}
+            for i, link in enumerate(sourcing.enabled_links(), start=1)
+            if link.price_for(self.audience) is not None
+        ]
+        data = OfferSerializer(rows, many=True,
+                               context={"audience": self.audience}).data
+        return Response(data)
+
+
+class RetailProductOffers(_BaseOffers):
+    permission_classes = [permissions.AllowAny]
+    audience = "retail"
+    visibility_field = "show_on_retail"
+
+
+class ResellerProductOffers(_BaseOffers):
     permission_classes = [permissions.IsAuthenticated]
     audience = "reseller"
     visibility_field = "show_on_reseller"

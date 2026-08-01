@@ -52,11 +52,47 @@ class PublicSourcingProductSerializer(serializers.Serializer):
         ]
 
     def get_is_slot(self, obj):
-        link = obj.cheapest_link()
-        return bool(link and link.supplier_product.is_slot)
+        links = obj.enabled_links()
+        return bool(links and links[0].supplier_product.is_slot)
 
     def get_slot_durations(self, obj):
-        link = obj.cheapest_link()
-        if link and link.supplier_product.is_slot:
-            return link.supplier_product.slot_durations
+        links = obj.enabled_links()
+        if links and links[0].supplier_product.is_slot:
+            return links[0].supplier_product.slot_durations
         return []
+
+
+class OfferSerializer(serializers.Serializer):
+    """One user-selectable offer (attached bot product) — bot name is hidden."""
+    offer_id = serializers.SerializerMethodField()
+    label = serializers.SerializerMethodField()
+    price = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
+    available = serializers.SerializerMethodField()
+    is_slot = serializers.SerializerMethodField()
+    slot_durations = serializers.SerializerMethodField()
+
+    def _audience(self):
+        return self.context.get("audience", "retail")
+
+    def get_offer_id(self, obj):
+        return obj["link"].id
+
+    def get_label(self, obj):
+        return obj["link"].label(obj["index"])
+
+    def get_price(self, obj):
+        p = obj["link"].price_for(self._audience())
+        return str(p) if p is not None else None
+
+    def get_in_stock(self, obj):
+        return obj["link"].supplier_product.in_stock
+
+    def get_available(self, obj):
+        return obj["link"].supplier_product.available
+
+    def get_is_slot(self, obj):
+        return obj["link"].supplier_product.is_slot
+
+    def get_slot_durations(self, obj):
+        return obj["link"].supplier_product.slot_durations

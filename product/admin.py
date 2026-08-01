@@ -14,13 +14,6 @@ from .models import (
 # Inline Admins
 # =========================
 
-class ProductPlanInline(admin.TabularInline):
-    model = ProductPlan
-    extra = 1
-    fields = ("title", "duration_months", "price", "is_active")
-    ordering = ("duration_months",)
-
-
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
     extra = 1
@@ -43,7 +36,6 @@ class ReviewInline(admin.TabularInline):
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
         "title",
-        "plans_count",
         "images_count",
         "status",
         "created_at",
@@ -52,29 +44,22 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ("title",)
     filter_horizontal = ("categories",)
     inlines = [
-        ProductPlanInline,
         ProductImageInline,
         ReviewInline,
     ]
     ordering = ("-created_at",)
 
-    # ✅ Minimal change: notes show in admin form
+    # Admin now manages only title + description (+ notes, category, status).
+    # Pricing/plans are handled per-offer in Sourcing → Product Sourcing.
     fieldsets = (
-        (None, {"fields": ("title", "description", "notes", "price", "categories", "status")}),
+        (None, {"fields": ("title", "description", "notes", "categories", "status")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
     readonly_fields = ("created_at", "updated_at")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(
-            _plans_count=Count("plans"),
-            _images_count=Count("images"),
-        )
-
-    @admin.display(description="Plans")
-    def plans_count(self, obj):
-        return obj._plans_count
+        return qs.annotate(_images_count=Count("images"))
 
     @admin.display(description="Images")
     def images_count(self, obj):
@@ -84,26 +69,6 @@ class ProductAdmin(admin.ModelAdmin):
 # =========================
 # Product Plan Admin
 # =========================
-
-@admin.register(ProductPlan)
-class ProductPlanAdmin(admin.ModelAdmin):
-    list_display = (
-        "product",
-        "title",
-        "duration_display",
-        "price",
-        "is_active",
-    )
-    list_filter = ("is_active",)
-    search_fields = ("product__title", "title")
-    ordering = ("product", "duration_months")
-
-    @admin.display(description="Duration")
-    def duration_display(self, obj):
-        if obj.duration_months == 0:
-            return "Lifetime"
-        return f"{obj.duration_months} Month(s)"
-
 
 # =========================
 # Category Admin

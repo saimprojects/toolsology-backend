@@ -121,9 +121,9 @@ class ProductSourceLinkInline(admin.TabularInline):
     model = ProductSourceLink
     extra = 0
     autocomplete_fields = ("supplier_product",)
-    fields = ("supplier_product", "match_type", "is_enabled", "buy_quantity",
-              "sp_usd", "sp_stock")
-    readonly_fields = ("sp_usd", "sp_stock")
+    fields = ("supplier_product", "display_name", "is_enabled", "buy_quantity",
+              "sp_usd", "sp_stock", "retail_price", "reseller_price")
+    readonly_fields = ("sp_usd", "sp_stock", "retail_price", "reseller_price")
 
     @admin.display(description="USD cost")
     def sp_usd(self, obj):
@@ -133,18 +133,35 @@ class ProductSourceLinkInline(admin.TabularInline):
     def sp_stock(self, obj):
         return obj.supplier_product.available if obj.supplier_product_id else "-"
 
+    @admin.display(description="Retail PKR")
+    def retail_price(self, obj):
+        return obj.price_for("retail") if obj.pk else "-"
+
+    @admin.display(description="Reseller PKR")
+    def reseller_price(self, obj):
+        return obj.price_for("reseller") if obj.pk else "-"
+
 
 @admin.register(ProductSourcing)
 class ProductSourcingAdmin(admin.ModelAdmin):
     list_display = ("product", "show_on_retail", "show_on_reseller",
-                    "auto_match_enabled", "linked_bots", "cost_pkr_display",
-                    "retail_price_display", "reseller_price_display")
-    list_editable = ("show_on_retail", "show_on_reseller", "auto_match_enabled")
+                    "linked_bots", "retail_price_display", "reseller_price_display")
+    list_editable = ("show_on_retail", "show_on_reseller")
     list_filter = ("show_on_retail", "show_on_reseller", "auto_match_enabled")
     search_fields = ("product__title",)
     autocomplete_fields = ("product",)
     inlines = [ProductSourceLinkInline]
     actions = ["run_auto_match", "show_on_both", "hide_from_both"]
+    fieldsets = (
+        (None, {"fields": ("product", "auto_match_enabled",
+                           "show_on_retail", "show_on_reseller")}),
+        ("Commission (added on top of bot cost)", {
+            "fields": ("retail_margin_percent", "retail_commission_flat",
+                       "reseller_margin_percent", "reseller_commission_flat"),
+            "description": "Percent + optional flat PKR. Blank percent = global "
+                           "default. Applies to every offer of this product.",
+        }),
+    )
 
     @admin.action(description="Show on retail + reseller")
     def show_on_both(self, request, queryset):
@@ -160,11 +177,7 @@ class ProductSourcingAdmin(admin.ModelAdmin):
     def linked_bots(self, obj):
         return obj.links.filter(is_enabled=True).count()
 
-    @admin.display(description="Cost (PKR)")
-    def cost_pkr_display(self, obj):
-        return obj.cost_pkr()
-
-    @admin.display(description="Retail (PKR)")
+    @admin.display(description="Retail from (PKR)")
     def retail_price_display(self, obj):
         return obj.retail_price()
 

@@ -215,13 +215,24 @@ class ProductSourcing(models.Model):
         max_digits=6, decimal_places=2, null=True, blank=True,
         help_text="Blank = use global default reseller margin.",
     )
+    # Optional flat commission (added on top of the percentage), per product.
+    retail_commission_flat = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00"),
+        help_text="Extra flat PKR added to every retail offer (on top of %).",
+    )
+    reseller_commission_flat = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00"),
+        help_text="Extra flat PKR added to every reseller offer (on top of %).",
+    )
+    # NOTE: retail_price_override / reseller_price_override are legacy (kept to
+    # avoid a destructive migration) and are no longer used — pricing is per-offer.
     retail_price_override = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Fixed retail price in PKR (ignores margin/cost).",
+        help_text="Legacy, unused.",
     )
     reseller_price_override = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Fixed reseller price in PKR (ignores margin/cost).",
+        help_text="Legacy, unused.",
     )
 
     class Meta:
@@ -231,71 +242,45 @@ class ProductSourcing(models.Model):
     def __str__(self) -> str:
         return f"Sourcing for {self.product.title}"
 
-    # -- cost / price helpers ---------------------------------------------
+    # -- commission (percent) --------------------------------------------
 
-    def cheapest_link(self) -> "ProductSourceLink | None":
-        """The enabled, in-stock supplier link with the lowest USD cost."""
-        candidates = [
-            link for link in self.links.filter(is_enabled=True)
+    def retail_pct(self) -> Decimal:
+        s = SourcingSettings.load()
+        return (self.retail_margin_percent if self.retail_margin_percent is not None
+                else s.default_retail_margin_percent)
+
+    def reseller_pct(self) -> Decimal:
+        s = SourcingSettings.load()
+        return (self.reseller_margin_percent if self.reseller_margin_percent is not None
+                else s.default_reseller_margin_percent)
+
+    # -- offers (each enabled link is a user-selectable offer) ------------
+
+    def enabled_links(self) -> list["ProductSourceLink"]:
+        links = [
+            l for l in self.links.filter(is_enabled=True)
             .select_related("supplier_product", "supplier_product__bot")
-            if link.supplier_product
-            and link.supplier_product.usd_pricing is not None
-            and link.supplier_product.in_stock
-            and link.supplier_product.bot.is_active
+            if l.supplier_product
+            and l.supplier_product.usd_pricing is not None
+            and l.supplier_product.bot.is_active
         ]
-        if not candidates:
-            return None
-        return min(
-            candidates,
-            key=lambda l: (
-                l.supplier_product.usd_pricing,
-                l.supplier_product.bot.priority,
-            ),
-        )
-
-    def cost_usd(self) -> Decimal | None:
-        link = self.cheapest_link()
-        return link.supplier_product.usd_pricing if link else None
-
-    def cost_pkr(self) -> Decimal | None:
-        usd = self.cost_usd()
-        if usd is None:
-            return None
-        return (usd * SourcingSettings.load().usd_to_pkr_rate).quantize(Decimal("0.01"))
-
-    def _price(self, override, margin, default_margin) -> Decimal | None:
-        if override is not None:
-            return override
-        cost = self.cost_pkr()
-        if cost is None:
-            return None
-        m = margin if margin is not None else default_margin
-        return (cost * (Decimal("1") + m / Decimal("100"))).quantize(Decimal("0.01"))
-
-    def retail_price(self) -> Decimal | None:
-        s = SourcingSettings.load()
-        return self._price(
-            self.retail_price_override, self.retail_margin_percent,
-            s.default_retail_margin_percent,
-        )
-
-    def reseller_price(self) -> Decimal | None:
-        s = SourcingSettings.load()
-        return self._price(
-            self.reseller_price_override, self.reseller_margin_percent,
-            s.default_reseller_margin_percent,
-        )
+        return sorted(links, key=lambda l: l.supplier_product.usd_pricing)
 
     def price_for(self, buyer_type: str) -> Decimal | None:
-        return (self.reseller_price() if buyer_type == "reseller"
-                else self.retail_price())
+        """Lowest offer price (the 'from' price shown on listings)."""
+        prices = [p for p in (l.price_for(buyer_type) for l in self.enabled_links())
+                  if p is not None]
+        return min(prices) if prices else None
 
-    def has_own_stock(self) -> bool:
-        return self.product.stock_items.filter(is_sold=False).exists()
+    def retail_price(self) -> Decimal | None:
+        return self.price_for("retail")
+
+    def reseller_price(self) -> Decimal | None:
+        return self.price_for("reseller")
 
     def has_source(self) -> bool:
-        """True if this product can actually be fulfilled (bot link or own stock)."""
-        return self.cheapest_link() is not None or self.has_own_stock()
+        """True if at least one enabled, in-stock offer exists."""
+        return any(l.supplier_product.in_stock for l in self.enabled_links())
 
     def is_visible_for(self, buyer_type: str) -> bool:
         """Show on a panel only if ticked, product active, priced and fulfillable."""
@@ -325,6 +310,10 @@ class ProductSourceLink(models.Model):
         max_length=10, choices=MatchType.choices, default=MatchType.MANUAL
     )
     is_enabled = models.BooleanField(default=True)
+    display_name = models.CharField(
+        max_length=100, blank=True, default="",
+        help_text="Shown to the customer (bot name is hidden). Blank = 'Plan N'.",
+    )
     buy_quantity = models.PositiveIntegerField(
         default=1,
         help_text="Units to buy per 1 unit sold (normal products). Slots ignore this.",
@@ -338,6 +327,27 @@ class ProductSourceLink(models.Model):
 
     def __str__(self) -> str:
         return f"{self.product_sourcing.product.title} → {self.supplier_product}"
+
+    def label(self, index: int = 1) -> str:
+        return self.display_name or f"Plan {index}"
+
+    def cost_pkr(self) -> Decimal | None:
+        usd = self.supplier_product.usd_pricing
+        if usd is None:
+            return None
+        return usd * SourcingSettings.load().usd_to_pkr_rate
+
+    def price_for(self, buyer_type: str) -> Decimal | None:
+        """Displayed price for this single offer = cost + commission (% + flat)."""
+        cost = self.cost_pkr()
+        if cost is None:
+            return None
+        ps = self.product_sourcing
+        if buyer_type == "reseller":
+            pct, flat = ps.reseller_pct(), ps.reseller_commission_flat or Decimal("0")
+        else:
+            pct, flat = ps.retail_pct(), ps.retail_commission_flat or Decimal("0")
+        return (cost * (Decimal("1") + pct / Decimal("100")) + flat).quantize(Decimal("0.01"))
 
 
 # ===========================================================================
@@ -401,6 +411,7 @@ class Order(models.Model):
         Product, related_name="sourcing_orders", on_delete=models.PROTECT
     )
     quantity = models.PositiveIntegerField(default=1)
+    offer_label = models.CharField(max_length=100, blank=True, default="")
     buyer_type = models.CharField(
         max_length=10, choices=BuyerType.choices, default=BuyerType.RETAIL
     )

@@ -62,6 +62,7 @@ class TopupSerializer(serializers.Serializer):
 
 class WalletPurchaseSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1, default=1)
     idempotency_key = serializers.CharField(max_length=64)
     customer_email = serializers.EmailField(required=False, allow_blank=True, default="")

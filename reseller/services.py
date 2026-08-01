@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from payments.models import IncomingSms
 from payments.parser import normalize_trx
-from sourcing.models import Order, ProductSourcing
+from payments.services import resolve_offer
+from sourcing.models import Order
 from sourcing import purchase_engine
 
 from .models import Reseller, WalletTransaction
@@ -73,20 +74,23 @@ def topup_via_trx(reseller: Reseller, trx_id: str) -> WalletTransaction:
     return txn
 
 
-def purchase_from_wallet(reseller: Reseller, *, product, quantity: int,
-                         idempotency_key: str, customer_email: str = "",
+def purchase_from_wallet(reseller: Reseller, *, product, offer_id: int,
+                         quantity: int, idempotency_key: str,
+                         customer_email: str = "",
                          slot_months: int | None = None) -> Order:
-    """Deduct reseller price from wallet, then fulfil. Atomic + idempotent."""
+    """Deduct the chosen offer's reseller price from wallet, then buy it."""
     existing = Order.objects.filter(idempotency_key=idempotency_key).first()
     if existing:
         return existing
 
-    sourcing, _ = ProductSourcing.objects.get_or_create(product=product)
-    unit_price = sourcing.price_for("reseller")
+    link = resolve_offer(product, offer_id)
+    if link is None:
+        raise WalletError("invalid_offer", "Selected plan is not available.")
+    unit_price = link.price_for("reseller")
     if unit_price is None:
-        raise WalletError("not_for_sale", "This product is not available for sale.")
-    if not sourcing.has_source():
-        raise WalletError("out_of_stock", "This product is currently out of stock.")
+        raise WalletError("not_for_sale", "This plan is not available for sale.")
+    if not link.supplier_product.in_stock:
+        raise WalletError("out_of_stock", "This plan is out of stock.")
     total = (unit_price * Decimal(quantity)).quantize(Decimal("0.01"))
 
     with transaction.atomic():
@@ -110,6 +114,7 @@ def purchase_from_wallet(reseller: Reseller, *, product, quantity: int,
             user=locked.user,
             customer_email=customer_email,
             slot_months=slot_months,
+            offer_label=link.label(),
         )
         order.sell_amount_pkr = total
         order.save(update_fields=["sell_amount_pkr"])
@@ -119,8 +124,8 @@ def purchase_from_wallet(reseller: Reseller, *, product, quantity: int,
         _record(locked, WalletTransaction.Kind.PURCHASE, -total,
                 order=order, note=f"Purchase: {product.title}")
 
-    # Fulfil outside the wallet lock.
-    order = purchase_engine.fulfill(order)
+    # Buy the exact chosen offer (outside the wallet lock).
+    order = purchase_engine.purchase_offer(order, link)
 
     # If fulfilment failed (no stock/all bots failed), refund the wallet.
     if order.status == Order.Status.FAILED:

@@ -21,6 +21,7 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 
 class CheckoutSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1, default=1)
     trx_id = serializers.CharField(max_length=64)
     idempotency_key = serializers.CharField(max_length=64)

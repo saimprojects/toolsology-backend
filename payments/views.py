@@ -76,6 +76,7 @@ class _BaseCheckoutView(APIView):
         try:
             order = verify_and_fulfill(
                 product=product,
+                offer_id=v["offer_id"],
                 quantity=v["quantity"],
                 buyer_type=self.buyer_type,
                 trx_id=v["trx_id"],

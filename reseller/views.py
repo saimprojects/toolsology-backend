@@ -89,6 +89,7 @@ class WalletPurchaseView(APIView):
             order = purchase_from_wallet(
                 reseller,
                 product=product,
+                offer_id=v["offer_id"],
                 quantity=v["quantity"],
                 idempotency_key=v["idempotency_key"],
                 customer_email=v.get("customer_email", ""),
