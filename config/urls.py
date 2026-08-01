@@ -18,6 +18,8 @@ urlpatterns = [
     path('api/payments/', include('payments.urls')),
     # Reseller panel (signup, wallet, purchase)
     path('api/reseller/', include('reseller.urls')),
+    # Customer accounts (signup, orders)
+    path('api/customer/', include('customer.urls')),
     # JWT authentication endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

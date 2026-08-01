@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "sourcing.apps.SourcingConfig",
     "payments.apps.PaymentsConfig",
     "reseller.apps.ResellerConfig",
+    "customer.apps.CustomerConfig",
 ]
 
 # Shared secret the Android SMS-forwarder must send (?token=... or
