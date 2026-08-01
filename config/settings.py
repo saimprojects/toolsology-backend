@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "cloudinary_storage",
 
     "product.apps.ProductConfig",
+    "sourcing.apps.SourcingConfig",
 ]
 
 # =========================
