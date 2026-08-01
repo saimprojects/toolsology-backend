@@ -359,13 +359,18 @@ class ProductSourceLink(models.Model):
 # ===========================================================================
 
 class StockItem(models.Model):
-    """A pre-loaded account the site owns, delivered before falling back to bots."""
+    """A pre-loaded account the site owns.
+
+    Credentials are fully custom: each account holds any number of
+    (field name, value) pairs via StockField, so you decide the labels.
+    """
 
     product = models.ForeignKey(
         Product, related_name="stock_items", on_delete=models.CASCADE
     )
-    username = models.CharField(max_length=255)
-    password = models.CharField(max_length=255)
+    # Legacy fixed fields (kept, optional) — new stock uses StockField instead.
+    username = models.CharField(max_length=255, blank=True, default="")
+    password = models.CharField(max_length=255, blank=True, default="")
     verify_email = models.CharField(max_length=255, blank=True, default="")
     extra = models.TextField(blank=True, default="")
 
@@ -378,9 +383,43 @@ class StockItem(models.Model):
         verbose_name = "Stock Item (own)"
         verbose_name_plural = "Stock Items (own)"
 
+    def as_dict(self) -> dict:
+        """All custom fields as {name: value} (plus any legacy fields set)."""
+        data = {f.name: f.value for f in self.fields.all()}
+        if self.username:
+            data.setdefault("Username", self.username)
+        if self.password:
+            data.setdefault("Password", self.password)
+        if self.verify_email:
+            data.setdefault("Verify email", self.verify_email)
+        return data
+
+    def summary(self) -> str:
+        first = self.fields.first()
+        if first:
+            return f"{first.name}: {first.value}"
+        return self.username or "—"
+
     def __str__(self) -> str:
         state = "SOLD" if self.is_sold else "available"
-        return f"{self.product.title} — {self.username} ({state})"
+        return f"{self.product.title} — {self.summary()} ({state})"
+
+
+class StockField(models.Model):
+    """One custom (field name → value) pair on a stock item."""
+
+    stock_item = models.ForeignKey(
+        StockItem, related_name="fields", on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=100, help_text="e.g. Email, Password, 2FA")
+    value = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.name}: {self.value}"
 
 
 # ===========================================================================

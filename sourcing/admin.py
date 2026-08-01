@@ -1,4 +1,9 @@
 from django.contrib import admin, messages
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import path
+
+from product.models import Product
 
 from .models import (
     DeliveredAccount,
@@ -6,6 +11,7 @@ from .models import (
     ProductSourceLink,
     ProductSourcing,
     SourcingSettings,
+    StockField,
     StockItem,
     SupplierBot,
     SupplierProduct,
@@ -197,12 +203,69 @@ class ProductSourcingAdmin(admin.ModelAdmin):
 # Own stock
 # ===========================================================================
 
+class StockFieldInline(admin.TabularInline):
+    model = StockField
+    extra = 3
+    fields = ("name", "value", "order")
+
+
 @admin.register(StockItem)
 class StockItemAdmin(admin.ModelAdmin):
-    list_display = ("product", "username", "is_sold", "sold_at", "created_at")
+    list_display = ("product", "account_summary", "is_sold", "created_at")
     list_filter = ("is_sold", "product")
-    search_fields = ("product__title", "username")
-    readonly_fields = ("sold_at", "created_at")
+    search_fields = ("product__title", "fields__value", "fields__name")
+    inlines = [StockFieldInline]
+    fields = ("product", "is_sold")
+    change_list_template = "admin/sourcing/stockitem/change_list.html"
+
+    @admin.display(description="Account")
+    def account_summary(self, obj):
+        return obj.summary()
+
+    # -- Bulk add ---------------------------------------------------------
+
+    def get_urls(self):
+        custom = [
+            path("bulk-add/", self.admin_site.admin_view(self.bulk_add_view),
+                 name="sourcing_stockitem_bulk_add"),
+        ]
+        return custom + super().get_urls()
+
+    def bulk_add_view(self, request):
+        if request.method == "POST":
+            product = Product.objects.filter(id=request.POST.get("product")).first()
+            names = [n.strip() for n in request.POST.get("field_names", "").split(",")
+                     if n.strip()]
+            rows = request.POST.get("rows", "")
+            if not (product and names and rows.strip()):
+                self.message_user(
+                    request, "Please choose a product, field names and paste rows.",
+                    level=messages.ERROR)
+            else:
+                count = 0
+                for line in rows.splitlines():
+                    if not line.strip():
+                        continue
+                    parts = line.split("\t") if "\t" in line else line.split(",")
+                    parts = [p.strip() for p in parts]
+                    item = StockItem.objects.create(product=product)
+                    for i, name in enumerate(names):
+                        StockField.objects.create(
+                            stock_item=item, name=name,
+                            value=parts[i] if i < len(parts) else "", order=i)
+                    count += 1
+                self.message_user(request, f"Added {count} stock item(s).",
+                                  level=messages.SUCCESS)
+                return redirect("..")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Bulk add stock",
+            "opts": self.model._meta,
+            "products": Product.objects.all().order_by("title"),
+        }
+        return TemplateResponse(
+            request, "admin/sourcing/stockitem/bulk_add.html", context)
 
 
 # ===========================================================================

@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width:820px;">
+  <p style="color:#555;">
+    Add many accounts at once. First list your <b>field names</b> (e.g.
+    <code>Email, Password, Recovery</code>), then paste one account per line with
+    its values in the same order (comma or TAB separated).
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-weight:600;margin-bottom:4px;">Product</label>
+      <select name="product" style="min-width:320px;padding:6px;">
+        {% for p in products %}
+          <option value="{{ p.id }}">{{ p.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-weight:600;margin-bottom:4px;">
+        Field names (comma separated)
+      </label>
+      <input type="text" name="field_names" style="width:100%;padding:8px;"
+             placeholder="Email, Password, Recovery" />
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-weight:600;margin-bottom:4px;">
+        Accounts — one per line (values in the same order as the field names)
+      </label>
+      <textarea name="rows" rows="12" style="width:100%;padding:8px;font-family:monospace;"
+        placeholder="a@example.com, pass123, recovery1@example.com&#10;b@example.com, pass456, recovery2@example.com"></textarea>
+    </div>
+
+    <button type="submit" class="default" style="padding:8px 18px;">Add stock</button>
+    <a href=".." style="margin-left:12px;">Cancel</a>
+  </form>
+</div>
+{% endblock %}
