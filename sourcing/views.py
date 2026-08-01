@@ -15,6 +15,7 @@ from django.shortcuts import get_object_or_404
 from product.models import Product
 
 from .models import ProductSourcing, StockOffer
+from .pricing import offer_summary
 
 
 class _BaseSourcingList(APIView):
@@ -40,31 +41,11 @@ class _BaseSourcingList(APIView):
         )
         out = []
         for product in products:
-            price, in_stock = self._summary(product)
+            price, in_stock = offer_summary(product, self.audience)
             if price is None:
                 continue
             out.append(self._serialize(product, price, in_stock))
         return Response(out)
-
-    def _summary(self, product):
-        prices, in_stock = [], False
-        try:
-            sourcing = product.sourcing
-        except ProductSourcing.DoesNotExist:
-            sourcing = None
-        if sourcing and getattr(sourcing, self.visibility_field):
-            for link in sourcing.enabled_links():
-                p = link.price_for(self.audience)
-                if p is not None:
-                    prices.append(p)
-                    if link.supplier_product.in_stock:
-                        in_stock = True
-        for so in product.stock_offers.filter(is_enabled=True,
-                                               **{self.visibility_field: True}):
-            prices.append(so.price_for(self.audience))
-            if so.in_stock():
-                in_stock = True
-        return (min(prices) if prices else None), in_stock
 
     def _serialize(self, product, price, in_stock):
         img = product.images.filter(is_main=True).first() or product.images.first()
@@ -115,6 +96,7 @@ class _BaseOffers(APIView):
                 offers.append({
                     "offer_id": f"bot-{link.id}",
                     "label": link.label(i),
+                    "short_description": link.short_description,
                     "price": str(price),
                     "in_stock": sp.in_stock,
                     "available": sp.available,
@@ -128,6 +110,7 @@ class _BaseOffers(APIView):
             offers.append({
                 "offer_id": f"stock-{so.id}",
                 "label": so.label(),
+                "short_description": so.short_description,
                 "price": str(so.price_for(self.audience)),
                 "in_stock": so.in_stock(),
                 "available": so.available_count(),

@@ -314,6 +314,10 @@ class ProductSourceLink(models.Model):
         max_length=100, blank=True, default="",
         help_text="Shown to the customer (bot name is hidden). Blank = 'Plan N'.",
     )
+    short_description = models.TextField(
+        blank=True, default="",
+        help_text="Optional. Shown (collapsed) under the offer title on the site.",
+    )
     buy_quantity = models.PositiveIntegerField(
         default=1,
         help_text="Units to buy per 1 unit sold (normal products). Slots ignore this.",
@@ -435,6 +439,10 @@ class StockOffer(models.Model):
     display_name = models.CharField(
         max_length=100, blank=True, default="",
         help_text="Shown to the customer, e.g. '1 Month (in-house)'.",
+    )
+    short_description = models.TextField(
+        blank=True, default="",
+        help_text="Optional. Shown (collapsed) under the offer title on the site.",
     )
     retail_price = models.DecimalField(max_digits=12, decimal_places=2)
     reseller_price = models.DecimalField(max_digits=12, decimal_places=2)

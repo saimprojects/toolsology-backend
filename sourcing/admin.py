@@ -128,8 +128,8 @@ class ProductSourceLinkInline(admin.TabularInline):
     model = ProductSourceLink
     extra = 0
     autocomplete_fields = ("supplier_product",)
-    fields = ("supplier_product", "display_name", "is_enabled", "buy_quantity",
-              "sp_usd", "sp_stock", "retail_price", "reseller_price")
+    fields = ("supplier_product", "display_name", "short_description", "is_enabled",
+              "buy_quantity", "sp_usd", "sp_stock", "retail_price", "reseller_price")
     readonly_fields = ("sp_usd", "sp_stock", "retail_price", "reseller_price")
 
     @admin.display(description="USD cost")

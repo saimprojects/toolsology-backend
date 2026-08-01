@@ -63,7 +63,10 @@ class ProductSerializer(serializers.ModelSerializer):
     categories = CategorySerializer(many=True, read_only=True)
     plans = ProductPlanSerializer(many=True, read_only=True)
     main_image = serializers.SerializerMethodField()
-    
+    # Live retail price from the offers system (same as checkout). This is what
+    # the cards should show, not the legacy `price` column.
+    store_price = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -72,6 +75,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'title',
             'description',
             'price',
+            'store_price',
+            'in_stock',
             'status',
             'categories',
             'images',
@@ -85,6 +90,21 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_main_image(self, obj):
         img = obj.images.filter(is_main=True).first() or obj.images.first()
         return img.image.url if img else None
+
+    def _summary(self, obj):
+        # Cache per-instance so store_price + in_stock don't recompute.
+        if not hasattr(obj, "_offer_summary_cache"):
+            from sourcing.pricing import offer_summary
+            obj._offer_summary_cache = offer_summary(obj, "retail")
+        return obj._offer_summary_cache
+
+    def get_store_price(self, obj):
+        price, _ = self._summary(obj)
+        return str(price) if price is not None else None
+
+    def get_in_stock(self, obj):
+        _, in_stock = self._summary(obj)
+        return in_stock
 
 
 class WhatsAppSettingsSerializer(serializers.ModelSerializer):
