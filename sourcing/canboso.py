@@ -2,9 +2,9 @@
 Canboso "Buyer API" client (v1.2.0).
 
 Only three public endpoints exist, all keyed by a single buyer `key`:
-    GET  /api/telegram-buyer/products?key=...
-    GET  /api/telegram-buyer/balance?key=...
-    POST /api/telegram-buyer/purchase   {key, product_id, quantity, ...}
+    GET  /api/v2/telegram-buyer/products?key=...
+    GET  /api/v2/telegram-buyer/balance?key=...
+    POST /api/v2/telegram-buyer/purchase   {key, product_id, quantity, ...}
 
 Design notes / hard constraints from the spec:
   * Auth is just the buyer key. Keep it server-side only, never expose it.
@@ -143,7 +143,7 @@ class CanbosoClient:
         """GET /products — returns the full response dict (products + wallet meta)."""
         try:
             resp = self._session.get(
-                self._url("/api/telegram-buyer/products"),
+                self._url("/api/v2/telegram-buyer/products"),
                 params={"key": self.api_key},
                 timeout=self.timeout,
             )
@@ -155,7 +155,7 @@ class CanbosoClient:
         """GET /balance — wallet balance for this key."""
         try:
             resp = self._session.get(
-                self._url("/api/telegram-buyer/balance"),
+                self._url("/api/v2/telegram-buyer/balance"),
                 params={"key": self.api_key},
                 timeout=self.timeout,
             )
@@ -190,7 +190,7 @@ class CanbosoClient:
 
         try:
             resp = self._session.post(
-                self._url("/api/telegram-buyer/purchase"),
+                self._url("/api/v2/telegram-buyer/purchase"),
                 json=body,
                 timeout=self.timeout,
             )
