@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 
 from django.conf import settings as dj_settings
 from django.db import models
@@ -355,7 +355,9 @@ class ProductSourceLink(models.Model):
             pct, flat = ps.reseller_pct(), ps.reseller_commission_flat or Decimal("0")
         else:
             pct, flat = ps.retail_pct(), ps.retail_commission_flat or Decimal("0")
-        return (cost * (Decimal("1") + pct / Decimal("100")) + flat).quantize(Decimal("0.01"))
+        raw = cost * (Decimal("1") + pct / Decimal("100")) + flat
+        # Never charge in paisas — always round UP to the next whole rupee.
+        return raw.quantize(Decimal("1"), rounding=ROUND_CEILING)
 
 
 # ===========================================================================
@@ -457,7 +459,9 @@ class StockOffer(models.Model):
         verbose_name_plural = "Own-stock Offers"
 
     def price_for(self, buyer_type: str):
-        return self.reseller_price if buyer_type == "reseller" else self.retail_price
+        price = self.reseller_price if buyer_type == "reseller" else self.retail_price
+        # Round UP to whole rupee (no paisas).
+        return price.quantize(Decimal("1"), rounding=ROUND_CEILING)
 
     def available_count(self) -> int:
         return self.product.stock_items.filter(is_sold=False).count()
