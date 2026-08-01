@@ -15,8 +15,8 @@ from django.shortcuts import get_object_or_404
 
 from product.models import Product
 
-from .models import ProductSourcing
-from .serializers import OfferSerializer, PublicSourcingProductSerializer
+from .models import ProductSourcing, StockOffer
+from .serializers import PublicSourcingProductSerializer
 
 
 class _BaseSourcingList(ListAPIView):
@@ -67,17 +67,40 @@ class _BaseOffers(APIView):
 
     def get(self, request, product_id):
         product = get_object_or_404(Product, pk=product_id, status=True)
+        offers = []
+
+        # Bot offers (each attached bot product).
         sourcing = ProductSourcing.objects.filter(product=product).first()
-        if not sourcing or not getattr(sourcing, self.visibility_field):
-            return Response([])
-        rows = [
-            {"link": link, "index": i}
-            for i, link in enumerate(sourcing.enabled_links(), start=1)
-            if link.price_for(self.audience) is not None
-        ]
-        data = OfferSerializer(rows, many=True,
-                               context={"audience": self.audience}).data
-        return Response(data)
+        if sourcing and getattr(sourcing, self.visibility_field):
+            for i, link in enumerate(sourcing.enabled_links(), start=1):
+                price = link.price_for(self.audience)
+                if price is None:
+                    continue
+                sp = link.supplier_product
+                offers.append({
+                    "offer_id": f"bot-{link.id}",
+                    "label": link.label(i),
+                    "price": str(price),
+                    "in_stock": sp.in_stock,
+                    "available": sp.available,
+                    "is_slot": sp.is_slot,
+                    "slot_durations": sp.slot_durations,
+                })
+
+        # Own-stock offers (fixed price, delivered from your stock).
+        for so in StockOffer.objects.filter(
+                product=product, is_enabled=True, **{self.visibility_field: True}):
+            offers.append({
+                "offer_id": f"stock-{so.id}",
+                "label": so.label(),
+                "price": str(so.price_for(self.audience)),
+                "in_stock": so.in_stock(),
+                "available": so.available_count(),
+                "is_slot": False,
+                "slot_durations": [],
+            })
+
+        return Response(offers)
 
 
 class RetailProductOffers(_BaseOffers):

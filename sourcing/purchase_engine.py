@@ -10,7 +10,8 @@ chosen offer. Outcomes:
 
 from __future__ import annotations
 
-from django.utils import timezone  # noqa: F401 (kept for callers)
+from django.db import transaction
+from django.utils import timezone
 
 from .canboso import (
     CanbosoAuthError,
@@ -20,7 +21,7 @@ from .canboso import (
     CanbosoNetworkError,
     CanbosoNotFound,
 )
-from .models import DeliveredAccount, Order
+from .models import DeliveredAccount, Order, StockItem
 
 SLOT_PRODUCT_ID = "slot_chatgpt_business"
 
@@ -42,6 +43,42 @@ def get_or_create_order(*, idempotency_key: str, product, quantity: int,
             "offer_label": offer_label,
         },
     )
+
+
+def deliver_from_stock(order: Order) -> Order:
+    """Fulfil an order from the product's own pre-loaded stock."""
+    if order.status != Order.Status.PENDING:
+        return order
+
+    with transaction.atomic():
+        items = list(
+            StockItem.objects.select_for_update(skip_locked=True)
+            .filter(product=order.product, is_sold=False)[: order.quantity]
+        )
+        if len(items) < order.quantity:
+            order.status = Order.Status.FAILED
+            order.error_message = "Out of stock."
+            order.save(update_fields=["status", "error_message"])
+            return order
+
+        now = timezone.now()
+        for item in items:
+            data = item.as_dict()
+            item.is_sold = True
+            item.sold_at = now
+            item.save(update_fields=["is_sold", "sold_at"])
+            DeliveredAccount.objects.create(
+                order=order,
+                username=data.get("Username") or data.get("Email") or "",
+                password=data.get("Password") or "",
+                verify_email=data.get("Verify email") or data.get("Recovery") or "",
+                details=data,
+            )
+        order.status = Order.Status.COMPLETED
+        order.source = Order.Source.OWN_STOCK
+        order.error_message = ""
+        order.save(update_fields=["status", "source", "error_message"])
+    return order
 
 
 def purchase_offer(order: Order, link) -> Order:

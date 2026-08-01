@@ -83,13 +83,14 @@ def purchase_from_wallet(reseller: Reseller, *, product, offer_id: int,
     if existing:
         return existing
 
-    link = resolve_offer(product, offer_id)
-    if link is None:
+    kind, obj = resolve_offer(product, offer_id)
+    if obj is None:
         raise WalletError("invalid_offer", "Selected plan is not available.")
-    unit_price = link.price_for("reseller")
+    unit_price = obj.price_for("reseller")
     if unit_price is None:
         raise WalletError("not_for_sale", "This plan is not available for sale.")
-    if not link.supplier_product.in_stock:
+    in_stock = obj.supplier_product.in_stock if kind == "bot" else obj.in_stock()
+    if not in_stock:
         raise WalletError("out_of_stock", "This plan is out of stock.")
     total = (unit_price * Decimal(quantity)).quantize(Decimal("0.01"))
 
@@ -114,7 +115,7 @@ def purchase_from_wallet(reseller: Reseller, *, product, offer_id: int,
             user=locked.user,
             customer_email=customer_email,
             slot_months=slot_months,
-            offer_label=link.label(),
+            offer_label=obj.label(),
         )
         order.sell_amount_pkr = total
         order.save(update_fields=["sell_amount_pkr"])
@@ -124,8 +125,11 @@ def purchase_from_wallet(reseller: Reseller, *, product, offer_id: int,
         _record(locked, WalletTransaction.Kind.PURCHASE, -total,
                 order=order, note=f"Purchase: {product.title}")
 
-    # Buy the exact chosen offer (outside the wallet lock).
-    order = purchase_engine.purchase_offer(order, link)
+    # Fulfil the chosen offer (outside the wallet lock).
+    if kind == "bot":
+        order = purchase_engine.purchase_offer(order, obj)
+    else:
+        order = purchase_engine.deliver_from_stock(order)
 
     # If fulfilment failed (no stock/all bots failed), refund the wallet.
     if order.status == Order.Status.FAILED:

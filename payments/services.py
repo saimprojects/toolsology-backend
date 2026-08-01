@@ -7,23 +7,34 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from sourcing.models import Order, ProductSourceLink
+from sourcing.models import Order, ProductSourceLink, StockOffer
 from sourcing import purchase_engine
 
 from .models import IncomingSms, PaymentMethod
 from .parser import normalize_trx, parse_sms
 
 
-def resolve_offer(product, offer_id):
-    """Return the enabled ProductSourceLink (offer) for this product, or None."""
-    return (
+def resolve_offer(product, offer_token):
+    """Resolve an offer token to (kind, obj).
+
+    kind is 'bot' (ProductSourceLink), 'stock' (StockOffer), or None.
+    Tokens look like 'bot-5' / 'stock-3'. A bare integer is treated as a bot
+    link id for backward compatibility.
+    """
+    token = str(offer_token)
+    if token.startswith("stock-"):
+        so = StockOffer.objects.filter(
+            id=token[6:], is_enabled=True, product=product).first()
+        return ("stock", so)
+    link_id = token[4:] if token.startswith("bot-") else token
+    link = (
         ProductSourceLink.objects
         .select_related("supplier_product", "supplier_product__bot",
                         "product_sourcing")
-        .filter(id=offer_id, is_enabled=True,
-                product_sourcing__product=product)
+        .filter(id=link_id, is_enabled=True, product_sourcing__product=product)
         .first()
     )
+    return ("bot", link)
 
 
 class PaymentError(Exception):
@@ -87,13 +98,14 @@ def verify_and_fulfill(
     if existing:
         return existing
 
-    link = resolve_offer(product, offer_id)
-    if link is None:
+    kind, obj = resolve_offer(product, offer_id)
+    if obj is None:
         raise PaymentError("invalid_offer", "Selected plan is not available.")
-    unit_price = link.price_for(buyer_type)
+    unit_price = obj.price_for(buyer_type)
     if unit_price is None:
         raise PaymentError("not_for_sale", "This plan is not available for sale.")
-    if not link.supplier_product.in_stock:
+    in_stock = obj.supplier_product.in_stock if kind == "bot" else obj.in_stock()
+    if not in_stock:
         raise PaymentError("out_of_stock", "This plan is out of stock.")
 
     expected_total = (unit_price * Decimal(quantity)).quantize(Decimal("0.01"))
@@ -128,7 +140,7 @@ def verify_and_fulfill(
             user=user,
             customer_email=customer_email,
             slot_months=slot_months,
-            offer_label=link.label(),
+            offer_label=obj.label(),
         )
         order.sell_amount_pkr = expected_total
         order.save(update_fields=["sell_amount_pkr"])
@@ -138,6 +150,9 @@ def verify_and_fulfill(
         sms.consumed_by_order = order
         sms.save(update_fields=["is_consumed", "consumed_at", "consumed_by_order"])
 
-    # Buy the exact chosen offer (outside the payment lock).
-    purchase_engine.purchase_offer(order, link)
+    # Fulfil the chosen offer (outside the payment lock).
+    if kind == "bot":
+        purchase_engine.purchase_offer(order, obj)
+    else:
+        purchase_engine.deliver_from_stock(order)
     return order

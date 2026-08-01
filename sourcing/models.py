@@ -422,6 +422,48 @@ class StockField(models.Model):
         return f"{self.name}: {self.value}"
 
 
+class StockOffer(models.Model):
+    """A sellable offer backed by your OWN stock (not a bot).
+
+    You set a fixed price (retail + reseller). When a customer buys it, one
+    unsold StockItem of the same product is delivered and marked sold.
+    """
+
+    product = models.ForeignKey(
+        Product, related_name="stock_offers", on_delete=models.CASCADE
+    )
+    display_name = models.CharField(
+        max_length=100, blank=True, default="",
+        help_text="Shown to the customer, e.g. '1 Month (in-house)'.",
+    )
+    retail_price = models.DecimalField(max_digits=12, decimal_places=2)
+    reseller_price = models.DecimalField(max_digits=12, decimal_places=2)
+
+    is_enabled = models.BooleanField(default=True)
+    show_on_retail = models.BooleanField(default=True)
+    show_on_reseller = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Own-stock Offer"
+        verbose_name_plural = "Own-stock Offers"
+
+    def price_for(self, buyer_type: str):
+        return self.reseller_price if buyer_type == "reseller" else self.retail_price
+
+    def available_count(self) -> int:
+        return self.product.stock_items.filter(is_sold=False).count()
+
+    def in_stock(self) -> bool:
+        return self.available_count() > 0
+
+    def label(self, index: int = 1) -> str:
+        return self.display_name or "In-house stock"
+
+    def __str__(self) -> str:
+        return f"{self.product.title} — {self.display_name or 'stock'} ({self.retail_price})"
+
+
 # ===========================================================================
 # Orders
 # ===========================================================================
@@ -505,9 +547,11 @@ class DeliveredAccount(models.Model):
     order = models.ForeignKey(
         Order, related_name="delivered_accounts", on_delete=models.CASCADE
     )
-    username = models.CharField(max_length=255)
+    username = models.CharField(max_length=255, blank=True, default="")
     password = models.CharField(max_length=255, blank=True, default="")
     verify_email = models.CharField(max_length=255, blank=True, default="")
+    # For own-stock deliveries with custom fields: {field name: value}.
+    details = models.JSONField(default=dict, blank=True)
     delivered_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

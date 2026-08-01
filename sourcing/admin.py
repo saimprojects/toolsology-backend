@@ -13,6 +13,7 @@ from .models import (
     SourcingSettings,
     StockField,
     StockItem,
+    StockOffer,
     SupplierBot,
     SupplierProduct,
 )
@@ -202,6 +203,21 @@ class ProductSourcingAdmin(admin.ModelAdmin):
 # ===========================================================================
 # Own stock
 # ===========================================================================
+
+@admin.register(StockOffer)
+class StockOfferAdmin(admin.ModelAdmin):
+    list_display = ("product", "display_name", "retail_price", "reseller_price",
+                    "available", "is_enabled", "show_on_retail", "show_on_reseller")
+    list_editable = ("retail_price", "reseller_price", "is_enabled",
+                     "show_on_retail", "show_on_reseller")
+    list_filter = ("is_enabled", "show_on_retail", "show_on_reseller")
+    search_fields = ("product__title", "display_name")
+    autocomplete_fields = ("product",)
+
+    @admin.display(description="Stock available")
+    def available(self, obj):
+        return obj.available_count()
+
 
 class StockFieldInline(admin.TabularInline):
     model = StockField

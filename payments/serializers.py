@@ -21,7 +21,7 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 
 class CheckoutSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
-    offer_id = serializers.IntegerField()
+    offer_id = serializers.CharField(max_length=32)
     quantity = serializers.IntegerField(min_value=1, default=1)
     trx_id = serializers.CharField(max_length=64)
     idempotency_key = serializers.CharField(max_length=64)
@@ -32,7 +32,7 @@ class CheckoutSerializer(serializers.Serializer):
 class DeliveredAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveredAccount
-        fields = ["username", "password", "verify_email", "delivered_at"]
+        fields = ["username", "password", "verify_email", "details", "delivered_at"]
 
 
 class OrderResultSerializer(serializers.ModelSerializer):

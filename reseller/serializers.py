@@ -24,9 +24,9 @@ class ResellerOrderSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
-    email = serializers.EmailField(required=False, allow_blank=True, default="")
+    email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=6)
-    phone = serializers.CharField(required=False, allow_blank=True, default="")
+    phone = serializers.CharField(max_length=32)
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
@@ -62,7 +62,7 @@ class TopupSerializer(serializers.Serializer):
 
 class WalletPurchaseSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
-    offer_id = serializers.IntegerField()
+    offer_id = serializers.CharField(max_length=32)
     quantity = serializers.IntegerField(min_value=1, default=1)
     idempotency_key = serializers.CharField(max_length=64)
     customer_email = serializers.EmailField(required=False, allow_blank=True, default="")
