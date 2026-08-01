@@ -8,7 +8,6 @@ internally at purchase time — the frontend only ever sees one final price.
 from __future__ import annotations
 
 from rest_framework import permissions
-from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
@@ -16,34 +15,70 @@ from django.shortcuts import get_object_or_404
 from product.models import Product
 
 from .models import ProductSourcing, StockOffer
-from .serializers import PublicSourcingProductSerializer
 
 
-class _BaseSourcingList(ListAPIView):
-    serializer_class = PublicSourcingProductSerializer
-    pagination_class = None
+class _BaseSourcingList(APIView):
+    """Products visible for an audience — from bot offers AND own-stock offers."""
     audience = "retail"
     visibility_field = "show_on_retail"
 
-    def get_queryset(self):
-        qs = (
+    def get(self, request):
+        vf = self.visibility_field
+        ids = set(
             ProductSourcing.objects
-            .filter(product__status=True, **{self.visibility_field: True})
-            .select_related("product")
-            .prefetch_related(
-                "product__images",
-                "product__categories",
-                "product__stock_items",
-                "links__supplier_product__bot",
-            )
+            .filter(product__status=True, **{vf: True})
+            .values_list("product_id", flat=True)
         )
-        # Keep only rows that are actually sellable for this audience.
-        return [s for s in qs if s.is_visible_for(self.audience)]
+        ids.update(
+            StockOffer.objects
+            .filter(is_enabled=True, product__status=True, **{vf: True})
+            .values_list("product_id", flat=True)
+        )
+        products = (
+            Product.objects.filter(id__in=ids, status=True)
+            .prefetch_related("images", "categories", "stock_offers")
+        )
+        out = []
+        for product in products:
+            price, in_stock = self._summary(product)
+            if price is None:
+                continue
+            out.append(self._serialize(product, price, in_stock))
+        return Response(out)
 
-    def get_serializer_context(self):
-        ctx = super().get_serializer_context()
-        ctx["audience"] = self.audience
-        return ctx
+    def _summary(self, product):
+        prices, in_stock = [], False
+        try:
+            sourcing = product.sourcing
+        except ProductSourcing.DoesNotExist:
+            sourcing = None
+        if sourcing and getattr(sourcing, self.visibility_field):
+            for link in sourcing.enabled_links():
+                p = link.price_for(self.audience)
+                if p is not None:
+                    prices.append(p)
+                    if link.supplier_product.in_stock:
+                        in_stock = True
+        for so in product.stock_offers.filter(is_enabled=True,
+                                               **{self.visibility_field: True}):
+            prices.append(so.price_for(self.audience))
+            if so.in_stock():
+                in_stock = True
+        return (min(prices) if prices else None), in_stock
+
+    def _serialize(self, product, price, in_stock):
+        img = product.images.filter(is_main=True).first() or product.images.first()
+        return {
+            "id": product.id,
+            "title": product.title,
+            "description": product.description,
+            "categories": [{"id": c.id, "name": c.name, "slug": c.slug}
+                           for c in product.categories.all()],
+            "main_image": img.image.url if img else None,
+            "images": [i.image.url for i in product.images.all()],
+            "price": str(price),
+            "in_stock": in_stock,
+        }
 
 
 class RetailProductList(_BaseSourcingList):
