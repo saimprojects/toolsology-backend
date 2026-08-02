@@ -25,8 +25,8 @@ def is_enabled() -> bool:
 
 
 def is_pay_id_enabled() -> bool:
-    return bool(settings.BINANCE_PAYMENT_ENABLED and settings.BINANCE_API_KEY
-                and settings.BINANCE_API_SECRET and settings.BINANCE_PAY_ID)
+    return bool(settings.BINANCE_PAYMENT_ENABLED and settings.BINANCE_PAY_API_KEY
+                and settings.BINANCE_PAY_API_SECRET and settings.BINANCE_PAY_ID)
 
 
 def pkr_rate() -> Decimal:
@@ -131,12 +131,14 @@ def find_pay_transaction(transaction_id: str) -> dict:
         "recvWindow": 5000,
     }
     query = urlencode(params)
-    signature = hmac.new(settings.BINANCE_API_SECRET.encode(), query.encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(
+        settings.BINANCE_PAY_API_SECRET.encode(), query.encode(), hashlib.sha256
+    ).hexdigest()
     url = f"{settings.BINANCE_API_BASE_URL.rstrip('/')}/sapi/v1/pay/transactions"
     try:
         response = requests.get(
             url, params={**params, "signature": signature},
-            headers={"X-MBX-APIKEY": settings.BINANCE_API_KEY}, timeout=12,
+            headers={"X-MBX-APIKEY": settings.BINANCE_PAY_API_KEY}, timeout=12,
         )
         response.raise_for_status()
         payload = response.json()
@@ -147,6 +149,17 @@ def find_pay_transaction(transaction_id: str) -> dict:
                 detail = exc.response.json().get("message", "") or exc.response.json().get("msg", "")
             except (ValueError, AttributeError):
                 pass
+        normalized = detail.casefold()
+        if "invalid api-key" in normalized or "api-key id" in normalized:
+            raise BinanceError(
+                "invalid_api_key",
+                "Binance Pay verification key is invalid. The site administrator must update the Binance Pay API credentials.",
+            ) from exc
+        if "restricted location" in normalized or "service unavailable from a restricted" in normalized:
+            raise BinanceError(
+                "binance_region_restricted",
+                "Binance Pay API is unavailable from the server region. Please contact support.",
+            ) from exc
         raise BinanceError("api_unavailable", detail or "Could not verify Binance ID payment right now. Please retry shortly.") from exc
 
     if payload.get("success") is False:
@@ -156,8 +169,11 @@ def find_pay_transaction(transaction_id: str) -> dict:
                  if str(row.get("transactionId", "")).strip().casefold() == wanted), None)
     if not item:
         raise BinanceError("not_found", "Incoming Binance ID payment not found. Check the transaction ID and retry.")
-    receiver_id = str((item.get("receiverInfo") or {}).get("binanceId", "")).strip()
-    if receiver_id.casefold() != settings.BINANCE_PAY_ID.strip().casefold():
+    receiver_info = item.get("receiverInfo") or {}
+    receiver_id = str(receiver_info.get("binanceId", "")).strip() if isinstance(receiver_info, dict) else ""
+    # The user-data endpoint is scoped to the API-key owner. Some Binance
+    # response versions omit receiverInfo; validate it whenever it is supplied.
+    if receiver_id and receiver_id.casefold() != settings.BINANCE_PAY_ID.casefold():
         raise BinanceError("wrong_receiver", "This payment was not sent to our Binance ID.")
     if str(item.get("currency", "")).upper() != settings.BINANCE_COIN:
         raise BinanceError("wrong_coin", f"Payment must use {settings.BINANCE_COIN}.")
