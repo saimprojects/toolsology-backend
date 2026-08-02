@@ -15,7 +15,6 @@ from .models import ResellerApiKey, WalletTransaction
 from .authentication import ResellerApiKeyAuthentication
 from .permissions import ActiveResellerPermission
 from sourcing.models import ProductSourcing, StockOffer
-from sourcing.pricing import offer_summary
 from .serializers import (
     RegisterSerializer,
     ResellerMeSerializer,
@@ -178,12 +177,44 @@ class ExternalProductsView(_ExternalApiView):
         products = Product.objects.filter(status=True).prefetch_related("images", "stock_offers")
         data = []
         for product in products:
-            price, in_stock = offer_summary(product, "reseller")
-            if price is None:
+            prices, in_stock = [], False
+            sourcing = ProductSourcing.objects.filter(product=product, show_on_reseller=True).first()
+            if sourcing:
+                for link in sourcing.enabled_links():
+                    price = link.price_for("reseller")
+                    if price is not None:
+                        prices.append(price)
+                        in_stock = in_stock or link.supplier_product.in_stock
+            for offer in product.stock_offers.filter(is_enabled=True, show_on_reseller=True):
+                prices.append(offer.price_for("reseller"))
+                in_stock = in_stock or offer.in_stock()
+            if not prices:
                 continue
             data.append({"id": product.id, "slug": product.slug, "name": product.title,
-                         "price_pkr": str(price), "in_stock": in_stock})
+                         "price_pkr": str(min(prices)), "in_stock": in_stock})
         return Response({"data": data})
+
+
+class ExternalProductOffersView(_ExternalApiView):
+    def get(self, request, slug):
+        product = get_object_or_404(Product, slug=slug, status=True)
+        offers = []
+        sourcing = ProductSourcing.objects.filter(product=product, show_on_reseller=True).first()
+        if sourcing:
+            for index, link in enumerate(sourcing.enabled_links(), start=1):
+                price = link.price_for("reseller")
+                if price is not None:
+                    offers.append({"offer_id": f"bot-{link.id}", "label": link.label(index),
+                                   "description": link.short_description, "price_pkr": str(price),
+                                   "in_stock": link.supplier_product.in_stock,
+                                   "is_slot": link.supplier_product.is_slot,
+                                   "slot_durations": link.supplier_product.slot_durations})
+        for offer in StockOffer.objects.filter(product=product, is_enabled=True, show_on_reseller=True):
+            offers.append({"offer_id": f"stock-{offer.id}", "label": offer.label(),
+                           "description": offer.short_description,
+                           "price_pkr": str(offer.price_for("reseller")),
+                           "in_stock": offer.in_stock(), "is_slot": False, "slot_durations": []})
+        return Response({"product": {"slug": product.slug, "name": product.title}, "data": offers})
 
 
 class ExternalPurchaseView(_ExternalApiView):
@@ -210,8 +241,12 @@ class ExternalPurchaseView(_ExternalApiView):
 
 class ExternalOrdersView(_ExternalApiView):
     def get(self, request):
-        orders = Order.objects.filter(user=request.user).select_related("product").order_by("-created_at")[:100]
+        orders = (Order.objects.filter(user=request.user).select_related("product")
+                  .prefetch_related("delivered_accounts").order_by("-created_at")[:100])
         return Response({"data": [{"id": o.id, "product": o.product.title,
+                                    "product_slug": o.product.slug,
                                     "status": o.status, "quantity": o.quantity,
-                                    "amount_pkr": str(o.sell_amount_pkr), "created_at": o.created_at}
+                                    "amount_pkr": str(o.sell_amount_pkr), "created_at": o.created_at,
+                                    "error_message": o.error_message,
+                                    "delivered_accounts": OrderResultSerializer(o).data["delivered_accounts"]}
                                    for o in orders]})
