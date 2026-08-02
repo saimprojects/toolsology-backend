@@ -168,6 +168,7 @@ class CanbosoClient:
         product_id: str,
         quantity: int = 1,
         *,
+        idempotency_key: str,
         customer_email: str | None = None,
         slot_months: int | None = None,
     ) -> dict[str, Any]:
@@ -180,6 +181,12 @@ class CanbosoClient:
         loss / 5xx). On that error the caller must assume the charge *might* have
         happened and reconcile — never silently retry the same bot.
         """
+        idempotency_key = (idempotency_key or "").strip()
+        if not 8 <= len(idempotency_key) <= 128:
+            raise CanbosoBadRequest(
+                "A valid Idempotency-Key is required (8-128 characters)."
+            )
+
         body: dict[str, Any] = {"key": self.api_key, "product_id": product_id}
         if slot_months is not None:
             body["slot_months"] = slot_months
@@ -192,6 +199,7 @@ class CanbosoClient:
             resp = self._session.post(
                 self._url("/api/v2/telegram-buyer/purchase"),
                 json=body,
+                headers={"Idempotency-Key": idempotency_key},
                 timeout=self.timeout,
             )
         except requests.Timeout as exc:

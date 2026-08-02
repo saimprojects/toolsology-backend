@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from django.db import transaction
 from django.utils import timezone
 
 import re
@@ -51,34 +52,56 @@ def sync_bot(bot: SupplierBot) -> dict:
         return summary
 
     wallet_currency = data.get("walletCurrency", "") or ""
-    products = data.get("products", []) or []
+    products = data.get("products")
+    if not isinstance(products, list):
+        bot.last_sync_error = "Invalid supplier response: products must be a list."
+        bot.last_synced = timezone.now()
+        bot.save(update_fields=["last_sync_error", "last_synced"])
+        summary["error"] = bot.last_sync_error
+        return summary
+
+    # A transient upstream/WAF problem can occasionally be returned as a
+    # successful but empty catalogue. Never wipe a previously healthy cache.
+    if not products and bot.products.exists():
+        bot.last_sync_error = "Supplier returned an unexpected empty catalogue; cached products were preserved."
+        bot.last_synced = timezone.now()
+        bot.save(update_fields=["last_sync_error", "last_synced"])
+        summary["error"] = bot.last_sync_error
+        return summary
 
     seen_ids: list[str] = []
-    for p in products:
-        remote_id = p.get("_id")
-        if not remote_id:
-            continue
-        seen_ids.append(remote_id)
-        stats = p.get("stats") or {}
-        SupplierProduct.objects.update_or_create(
-            bot=bot,
-            remote_id=remote_id,
-            defaults={
-                "name": p.get("product_name", "") or "",
-                "name_raw": p.get("product_name_raw", "") or "",
-                "wallet_currency": p.get("walletCurrency", wallet_currency) or "",
-                "wallet_pricing": _dec(p.get("walletPricing", p.get("pricing"))),
-                "usd_pricing": _dec(p.get("usdPricing")),
-                "available": stats.get("available"),
-                "is_slot": bool(p.get("isSlotProduct", False)),
-                "slot_durations": p.get("slotDurations") or [],
-                "raw": p,
-                "last_synced": timezone.now(),
-            },
-        )
+    synced_at = timezone.now()
+    with transaction.atomic():
+        for p in products:
+            remote_id = p.get("_id")
+            if not remote_id:
+                continue
+            remote_id = str(remote_id)
+            seen_ids.append(remote_id)
+            stats = p.get("stats") or {}
+            SupplierProduct.objects.update_or_create(
+                bot=bot,
+                remote_id=remote_id,
+                defaults={
+                    "name": p.get("product_name", "") or "",
+                    "name_raw": p.get("product_name_raw", "") or "",
+                    "wallet_currency": p.get("walletCurrency", wallet_currency) or "",
+                    "wallet_pricing": _dec(p.get("walletPricing", p.get("pricing"))),
+                    "usd_pricing": _dec(p.get("usdPricing")),
+                    "available": stats.get("available"),
+                    "is_slot": bool(p.get("isSlotProduct", False)),
+                    "slot_durations": p.get("slotDurations") or [],
+                    "raw": p,
+                    "last_synced": synced_at,
+                },
+            )
 
-    # Drop products this bot no longer offers.
-    SupplierProduct.objects.filter(bot=bot).exclude(remote_id__in=seen_ids).delete()
+        # Preserve local links when a supplier removes an item; it immediately
+        # becomes unavailable and can reappear on a later sync without remapping.
+        if seen_ids:
+            SupplierProduct.objects.filter(bot=bot).exclude(
+                remote_id__in=seen_ids
+            ).update(available=0, last_synced=synced_at)
 
     # Refresh cached wallet balance (best-effort).
     balance_text = ""

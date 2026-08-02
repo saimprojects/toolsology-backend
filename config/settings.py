@@ -101,6 +101,14 @@ BINANCE_PKR_PER_USDT = USD_TO_PKR_RATE
 BINANCE_PAYMENT_ENABLED = os.environ.get("BINANCE_PAYMENT_ENABLED", "False") == "True"
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://www.toolsology.shop").rstrip("/")
 
+# Supplier catalogue auto-sync. The production start command launches one
+# lightweight sync process beside Gunicorn. PostgreSQL advisory locking keeps
+# it single-run safe if the service is ever scaled horizontally.
+SUPPLIER_AUTO_SYNC_ENABLED = os.environ.get("SUPPLIER_AUTO_SYNC_ENABLED", "True") == "True"
+SUPPLIER_SYNC_INTERVAL_SECONDS = max(
+    60, int(os.environ.get("SUPPLIER_SYNC_INTERVAL_SECONDS", "300"))
+)
+
 # =========================
 # MIDDLEWARE
 # =========================

@@ -90,11 +90,13 @@ def purchase_offer(order: Order, link) -> Order:
     bot = sp.bot
     client = CanbosoClient(api_key=bot.api_key, base_url=bot.base_url)
     is_slot = sp.is_slot or sp.remote_id == SLOT_PRODUCT_ID
+    supplier_idempotency_key = f"toolsology-{order.idempotency_key}"
 
     try:
         if is_slot:
             resp = client.purchase(
                 sp.remote_id,
+                idempotency_key=supplier_idempotency_key,
                 customer_email=order.customer_email,
                 slot_months=order.slot_months,
             )
@@ -102,6 +104,7 @@ def purchase_offer(order: Order, link) -> Order:
             resp = client.purchase(
                 sp.remote_id,
                 quantity=order.quantity * link.buy_quantity,
+                idempotency_key=supplier_idempotency_key,
             )
     except CanbosoNetworkError as exc:
         order.status = Order.Status.NEEDS_REVIEW
