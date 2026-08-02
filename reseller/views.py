@@ -13,6 +13,7 @@ from sourcing.models import Order
 
 from .models import ResellerApiKey, WalletTransaction
 from .authentication import ResellerApiKeyAuthentication
+from .permissions import ActiveResellerPermission
 from sourcing.models import ProductSourcing, StockOffer
 from sourcing.pricing import offer_summary
 from .serializers import (
@@ -87,7 +88,7 @@ class WalletTopupView(APIView):
 
 
 class WalletPurchaseView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
 
     def post(self, request):
         ser = WalletPurchaseSerializer(data=request.data)
@@ -121,7 +122,7 @@ class TransactionsListView(ListAPIView):
 
 
 class OrdersListView(ListAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
     serializer_class = ResellerOrderSerializer
 
     def get_queryset(self):
@@ -131,7 +132,7 @@ class OrdersListView(ListAPIView):
 
 
 class DeveloperKeysView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
 
     def get(self, request):
         reseller = get_or_create_reseller(request.user)
@@ -153,7 +154,7 @@ class DeveloperKeysView(APIView):
 
 
 class DeveloperKeyRevokeView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
 
     def delete(self, request, pk):
         reseller = get_or_create_reseller(request.user)
@@ -165,7 +166,7 @@ class DeveloperKeyRevokeView(APIView):
 
 class _ExternalApiView(APIView):
     authentication_classes = [ResellerApiKeyAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
 
 
 class ExternalProductsView(_ExternalApiView):

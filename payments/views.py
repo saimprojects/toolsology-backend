@@ -17,6 +17,7 @@ from .serializers import (
 )
 from .services import PaymentError, promo_price_for_offer, store_incoming_sms, verify_and_fulfill
 from .binance import currency_config, public_config
+from reseller.permissions import ActiveResellerPermission
 
 
 class PaymentMethodListView(ListAPIView):
@@ -131,5 +132,5 @@ class RetailCheckoutView(_BaseCheckoutView):
 
 
 class ResellerCheckoutView(_BaseCheckoutView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
     buyer_type = "reseller"

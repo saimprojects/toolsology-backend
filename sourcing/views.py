@@ -16,6 +16,7 @@ from product.models import Product
 
 from .models import ProductSourcing, StockOffer
 from .pricing import offer_summary
+from reseller.permissions import ActiveResellerPermission
 
 
 class _BaseSourcingList(APIView):
@@ -74,7 +75,7 @@ class RetailProductList(_BaseSourcingList):
 
 class ResellerProductList(_BaseSourcingList):
     """Reseller panel — login (JWT) required, reseller pricing."""
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
     audience = "reseller"
     visibility_field = "show_on_reseller"
 
@@ -131,6 +132,6 @@ class RetailProductOffers(_BaseOffers):
 
 
 class ResellerProductOffers(_BaseOffers):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ActiveResellerPermission]
     audience = "reseller"
     visibility_field = "show_on_reseller"
