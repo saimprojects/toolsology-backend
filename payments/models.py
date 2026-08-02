@@ -78,3 +78,30 @@ class IncomingSms(models.Model):
 
     def __str__(self) -> str:
         return f"{self.trx_id or '??'} — {self.amount or '?'} ({self.sender})"
+
+
+class BinanceDeposit(models.Model):
+    """A successful Binance deposit consumed exactly once by this site."""
+
+    tx_id = models.CharField(max_length=160, unique=True, db_index=True)
+    coin = models.CharField(max_length=16, default="USDT")
+    network = models.CharField(max_length=32, blank=True, default="")
+    address = models.CharField(max_length=256, blank=True, default="")
+    amount = models.DecimalField(max_digits=24, decimal_places=8)
+    amount_pkr = models.DecimalField(max_digits=14, decimal_places=2)
+    order = models.ForeignKey(
+        "sourcing.Order", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="binance_payments",
+    )
+    reseller = models.ForeignKey(
+        "reseller.Reseller", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="binance_deposits",
+    )
+    raw_data = models.JSONField(default=dict, blank=True)
+    consumed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-consumed_at"]
+
+    def __str__(self):
+        return f"{self.coin} {self.amount} — {self.tx_id}"

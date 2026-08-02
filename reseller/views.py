@@ -25,6 +25,7 @@ from .services import (
     get_or_create_reseller,
     purchase_from_wallet,
     topup_via_trx,
+    topup_via_binance,
 )
 
 
@@ -63,7 +64,13 @@ class WalletTopupView(APIView):
         ser.is_valid(raise_exception=True)
         reseller = get_or_create_reseller(request.user)
         try:
-            txn = topup_via_trx(reseller, ser.validated_data["trx_id"])
+            if ser.validated_data.get("payment_type") in {"binance", "binance_id"}:
+                txn = topup_via_binance(
+                    reseller, ser.validated_data["trx_id"],
+                    via_pay_id=ser.validated_data.get("payment_type") == "binance_id",
+                )
+            else:
+                txn = topup_via_trx(reseller, ser.validated_data["trx_id"])
         except WalletError as exc:
             return Response({"code": exc.code, "detail": exc.message},
                             status=status.HTTP_400_BAD_REQUEST)

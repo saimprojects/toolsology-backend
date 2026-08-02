@@ -16,6 +16,7 @@ from .serializers import (
     PaymentMethodSerializer,
 )
 from .services import PaymentError, store_incoming_sms, verify_and_fulfill
+from .binance import currency_config, public_config
 
 
 class PaymentMethodListView(ListAPIView):
@@ -24,6 +25,20 @@ class PaymentMethodListView(ListAPIView):
     serializer_class = PaymentMethodSerializer
     queryset = PaymentMethod.objects.filter(is_active=True)
     pagination_class = None
+
+
+class BinanceConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return Response(public_config())
+
+
+class CurrencyConfigView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return Response(currency_config())
 
 
 class SmsWebhookView(APIView):
@@ -84,6 +99,7 @@ class _BaseCheckoutView(APIView):
                 customer_email=v.get("customer_email", ""),
                 slot_months=v.get("slot_months"),
                 user=request.user if request.user.is_authenticated else None,
+                payment_type=v.get("payment_type", "local"),
             )
         except PaymentError as exc:
             return Response({"code": exc.code, "detail": exc.message},

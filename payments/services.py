@@ -10,7 +10,8 @@ from django.utils import timezone
 from sourcing.models import Order, ProductSourceLink, StockOffer
 from sourcing import purchase_engine
 
-from .models import IncomingSms, PaymentMethod
+from .binance import BinanceError, find_pay_transaction, find_successful_deposit, pkr_to_coin
+from .models import BinanceDeposit, IncomingSms, PaymentMethod
 from .parser import normalize_trx, parse_sms
 
 
@@ -84,6 +85,7 @@ def verify_and_fulfill(
     customer_email: str = "",
     slot_months: int | None = None,
     user=None,
+    payment_type: str = "local",
 ) -> Order:
     """Match a trx id to an unconsumed SMS, then buy the CHOSEN offer.
 
@@ -109,6 +111,49 @@ def verify_and_fulfill(
         raise PaymentError("out_of_stock", "This plan is out of stock.")
 
     expected_total = (unit_price * Decimal(quantity)).quantize(Decimal("0.01"))
+
+    if payment_type in {"binance", "binance_id"}:
+        if BinanceDeposit.objects.filter(tx_id__iexact=trx_id.strip()).exists():
+            raise PaymentError("already_used", "This Binance TxID has already been used.")
+        try:
+            deposit_data = (find_pay_transaction(trx_id) if payment_type == "binance_id"
+                            else find_successful_deposit(trx_id))
+            paid_coin = Decimal(str(deposit_data.get("amount", "0")))
+            expected_coin = pkr_to_coin(expected_total)
+        except BinanceError as exc:
+            raise PaymentError(exc.code, exc.message) from exc
+        except Exception as exc:
+            raise PaymentError("bad_amount", "Binance returned an invalid deposit amount.") from exc
+        if paid_coin < expected_coin:
+            raise PaymentError(
+                "amount_mismatch",
+                f"Paid amount is too low (expected at least {expected_coin} {deposit_data.get('coin') or deposit_data.get('currency', 'USDT')}).",
+            )
+
+        with transaction.atomic():
+            if BinanceDeposit.objects.select_for_update().filter(tx_id__iexact=trx_id.strip()).exists():
+                raise PaymentError("already_used", "This Binance TxID has already been used.")
+            order, _ = purchase_engine.get_or_create_order(
+                idempotency_key=idempotency_key, product=product, quantity=quantity,
+                buyer_type=buyer_type, user=user, customer_email=customer_email,
+                slot_months=slot_months, offer_label=obj.label(),
+            )
+            order.sell_amount_pkr = expected_total
+            order.save(update_fields=["sell_amount_pkr"])
+            BinanceDeposit.objects.create(
+                tx_id=str(deposit_data.get("txId") or deposit_data.get("transactionId") or trx_id).strip(),
+                coin=str(deposit_data.get("coin") or deposit_data.get("currency", "USDT")),
+                network=("BINANCE_PAY" if payment_type == "binance_id" else str(deposit_data.get("network", ""))),
+                address=(str((deposit_data.get("receiverInfo") or {}).get("binanceId", ""))
+                         if payment_type == "binance_id" else str(deposit_data.get("address", ""))),
+                amount=paid_coin, amount_pkr=expected_total,
+                order=order, raw_data=deposit_data,
+            )
+        if kind == "bot":
+            purchase_engine.purchase_offer(order, obj)
+        else:
+            purchase_engine.deliver_from_stock(order)
+        return order
 
     with transaction.atomic():
         sms = (

@@ -79,6 +79,22 @@ INSTALLED_APPS = [
 # X-Webhook-Token header) so nobody can inject fake payment SMS.
 SMS_WEBHOOK_TOKEN = os.environ.get("SMS_WEBHOOK_TOKEN", "")
 
+# Binance deposit-history verification. The API key must be read-only.
+BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY", "")
+BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
+BINANCE_API_BASE_URL = os.environ.get("BINANCE_API_BASE_URL", "https://api.binance.com")
+BINANCE_COIN = os.environ.get("BINANCE_COIN", "USDT").upper()
+BINANCE_NETWORK = os.environ.get("BINANCE_NETWORK", "TRX").upper()
+BINANCE_DEPOSIT_ADDRESS = os.environ.get("BINANCE_DEPOSIT_ADDRESS", "")
+BINANCE_PAY_ID = os.environ.get("BINANCE_PAY_ID", "")
+# One global USD -> PKR rate for product pricing, display and USDT payments.
+# BINANCE_PKR_PER_USDT remains a backwards-compatible fallback.
+USD_TO_PKR_RATE = os.environ.get(
+    "USD_TO_PKR_RATE", os.environ.get("BINANCE_PKR_PER_USDT", "280")
+)
+BINANCE_PKR_PER_USDT = USD_TO_PKR_RATE
+BINANCE_PAYMENT_ENABLED = os.environ.get("BINANCE_PAYMENT_ENABLED", "False") == "True"
+
 # =========================
 # MIDDLEWARE
 # =========================

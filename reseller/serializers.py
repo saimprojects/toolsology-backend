@@ -57,7 +57,10 @@ class ResellerMeSerializer(serializers.ModelSerializer):
 
 
 class TopupSerializer(serializers.Serializer):
-    trx_id = serializers.CharField(max_length=64)
+    trx_id = serializers.CharField(max_length=160)
+    payment_type = serializers.ChoiceField(
+        choices=["local", "binance", "binance_id"], default="local", required=False
+    )
 
 
 class WalletPurchaseSerializer(serializers.Serializer):

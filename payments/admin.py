@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import IncomingSms, PaymentMethod
+from .models import BinanceDeposit, IncomingSms, PaymentMethod
 
 
 @admin.register(PaymentMethod)
@@ -31,3 +31,19 @@ class IncomingSmsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # SMS arrive via the webhook; manual add is allowed for reconciliation.
         return True
+
+
+@admin.register(BinanceDeposit)
+class BinanceDepositAdmin(admin.ModelAdmin):
+    list_display = ("tx_id", "amount", "coin", "network", "amount_pkr",
+                    "order", "reseller", "consumed_at")
+    list_filter = ("coin", "network", "consumed_at")
+    search_fields = ("tx_id", "address")
+    readonly_fields = ("tx_id", "coin", "network", "address", "amount",
+                       "amount_pkr", "order", "reseller", "raw_data", "consumed_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

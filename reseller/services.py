@@ -8,6 +8,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from payments.models import IncomingSms
+from payments.models import BinanceDeposit
+from payments.binance import BinanceError, coin_to_pkr, find_pay_transaction, find_successful_deposit
 from payments.parser import normalize_trx
 from payments.services import resolve_offer
 from sourcing.models import Order
@@ -71,6 +73,44 @@ def topup_via_trx(reseller: Reseller, trx_id: str) -> WalletTransaction:
 
         txn = _record(locked, WalletTransaction.Kind.DEPOSIT, sms.amount,
                       sms=sms, note="Wallet top-up")
+    return txn
+
+
+def topup_via_binance(reseller: Reseller, tx_id: str, *, via_pay_id: bool = False) -> WalletTransaction:
+    """Credit PKR wallet value from a confirmed, one-time Binance deposit."""
+    tx_id = (tx_id or "").strip()
+    if not tx_id:
+        raise WalletError("missing_trx", "Binance TxID is required.")
+    if BinanceDeposit.objects.filter(tx_id__iexact=tx_id).exists():
+        raise WalletError("already_used", "This Binance TxID is already used.")
+    try:
+        data = find_pay_transaction(tx_id) if via_pay_id else find_successful_deposit(tx_id)
+        coin_amount = Decimal(str(data.get("amount", "0")))
+        amount_pkr = coin_to_pkr(coin_amount)
+    except BinanceError as exc:
+        raise WalletError(exc.code, exc.message) from exc
+    except Exception as exc:
+        raise WalletError("bad_amount", "Binance returned an invalid deposit amount.") from exc
+    if amount_pkr <= 0:
+        raise WalletError("bad_amount", "Deposit amount must be greater than zero.")
+
+    with transaction.atomic():
+        locked = Reseller.objects.select_for_update().get(pk=reseller.pk)
+        if BinanceDeposit.objects.select_for_update().filter(tx_id__iexact=tx_id).exists():
+            raise WalletError("already_used", "This Binance TxID is already used.")
+        locked.wallet_balance += amount_pkr
+        locked.refresh_activation()
+        locked.save(update_fields=["wallet_balance", "is_activated", "activated_at"])
+        BinanceDeposit.objects.create(
+            tx_id=str(data.get("txId") or data.get("transactionId") or tx_id).strip(),
+            coin=str(data.get("coin") or data.get("currency", "USDT")),
+            network="BINANCE_PAY" if via_pay_id else str(data.get("network", "")),
+            address=(str((data.get("receiverInfo") or {}).get("binanceId", ""))
+                     if via_pay_id else str(data.get("address", ""))), amount=coin_amount,
+            amount_pkr=amount_pkr, reseller=locked, raw_data=data,
+        )
+        txn = _record(locked, WalletTransaction.Kind.DEPOSIT, amount_pkr,
+                      note=f"Binance top-up: {coin_amount} {data.get('coin') or data.get('currency', 'USDT')}")
     return txn
 
 

@@ -23,7 +23,10 @@ class CheckoutSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     offer_id = serializers.CharField(max_length=32)
     quantity = serializers.IntegerField(min_value=1, default=1)
-    trx_id = serializers.CharField(max_length=64)
+    trx_id = serializers.CharField(max_length=160)
+    payment_type = serializers.ChoiceField(
+        choices=["local", "binance", "binance_id"], default="local", required=False
+    )
     idempotency_key = serializers.CharField(max_length=64)
     customer_email = serializers.EmailField(required=False, allow_blank=True, default="")
     slot_months = serializers.IntegerField(required=False, allow_null=True, default=None)

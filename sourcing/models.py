@@ -343,7 +343,12 @@ class ProductSourceLink(models.Model):
         usd = self.supplier_product.usd_pricing
         if usd is None:
             return None
-        return usd * SourcingSettings.load().usd_to_pkr_rate
+        # Environment is the single deployment-wide source of truth. Keep the
+        # database field only as a backwards-compatible fallback.
+        rate = Decimal(str(getattr(
+            dj_settings, "USD_TO_PKR_RATE", SourcingSettings.load().usd_to_pkr_rate
+        )))
+        return usd * rate
 
     def price_for(self, buyer_type: str) -> Decimal | None:
         """Displayed price for this single offer = cost + commission (% + flat)."""
