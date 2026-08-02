@@ -14,13 +14,14 @@ from django.utils import timezone
 
 import re
 
-from .canboso import CanbosoClient, CanbosoError
+from .canboso import CanbosoError
 from .models import (
     ProductSourceLink,
     ProductSourcing,
     SupplierBot,
     SupplierProduct,
 )
+from .providers import client_for_bot
 
 
 def _dec(value) -> Decimal | None:
@@ -39,7 +40,7 @@ def sync_bot(bot: SupplierBot) -> dict:
     API error — it records the error on the bot and returns it in the summary,
     so a single bad key doesn't blow up a bulk sync.
     """
-    client = CanbosoClient(api_key=bot.api_key, base_url=bot.base_url)
+    client = client_for_bot(bot)
     summary = {"bot": bot.name, "synced": 0, "error": ""}
 
     try:

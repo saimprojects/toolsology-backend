@@ -21,6 +21,7 @@ class SupplierBot(models.Model):
         TELEGRAM2 = "telegram2", "Telegram (2nd)"
         BINANCE = "binance", "Binance bot"
         BYBIT = "bybit", "Bybit bot"
+        SSON = "sson", "SSON Digital Works"
         OTHER = "other", "Other"
 
     name = models.CharField(

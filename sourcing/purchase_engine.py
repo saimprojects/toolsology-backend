@@ -16,12 +16,12 @@ from django.utils import timezone
 from .canboso import (
     CanbosoAuthError,
     CanbosoBadRequest,
-    CanbosoClient,
     CanbosoInventoryError,
     CanbosoNetworkError,
     CanbosoNotFound,
 )
 from .models import DeliveredAccount, Order, StockItem
+from .providers import client_for_bot
 
 SLOT_PRODUCT_ID = "slot_chatgpt_business"
 
@@ -88,7 +88,7 @@ def purchase_offer(order: Order, link) -> Order:
 
     sp = link.supplier_product
     bot = sp.bot
-    client = CanbosoClient(api_key=bot.api_key, base_url=bot.base_url)
+    client = client_for_bot(bot)
     is_slot = sp.is_slot or sp.remote_id == SLOT_PRODUCT_ID
     supplier_idempotency_key = f"toolsology-{order.idempotency_key}"
 
@@ -127,6 +127,7 @@ def purchase_offer(order: Order, link) -> Order:
             username=acc.get("user", "") or "",
             password=acc.get("password", "") or "",
             verify_email=acc.get("verifyEmail", "") or "",
+            details=acc.get("details", {}) or {},
         )
     order.source = Order.Source.BOT
     order.fulfilled_bot = bot

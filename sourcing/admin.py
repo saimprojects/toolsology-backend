@@ -97,6 +97,14 @@ class SupplierBotAdmin(admin.ModelAdmin):
     readonly_fields = ("wallet_currency", "last_balance", "last_balance_text",
                        "last_synced", "last_sync_error")
 
+    def save_model(self, request, obj, form, change):
+        if (
+            obj.bot_source == SupplierBot.BotSource.SSON
+            and (not obj.base_url or "canboso.com" in obj.base_url)
+        ):
+            obj.base_url = "https://ssondigitalworks.online/api/reseller"
+        super().save_model(request, obj, form, change)
+
     @admin.display(description="Products")
     def product_count(self, obj):
         return obj.products.count()
