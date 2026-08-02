@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from django.db import models
 from cloudinary.models import CloudinaryField
+from django.core.validators import MinValueValidator
+from django.utils import timezone
 
 
 class PaymentMethod(models.Model):
@@ -41,6 +43,52 @@ class PaymentMethod(models.Model):
 
     def sender_list(self) -> list[str]:
         return [s.strip() for s in self.sender_ids.split(",") if s.strip()]
+
+
+class PromoCode(models.Model):
+    """Changes retail markup over platform cost; it is not a sale discount."""
+
+    code = models.CharField(max_length=40, unique=True)
+    product = models.ForeignKey(
+        "product.Product", null=True, blank=True, on_delete=models.CASCADE,
+        related_name="promo_codes", help_text="Blank applies to every product.",
+    )
+    markup_percent = models.DecimalField(
+        max_digits=7, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Percentage added on top of platform/base cost.",
+    )
+    markup_flat_pkr = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Flat PKR added after the percentage markup.",
+    )
+    is_active = models.BooleanField(default=True)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    max_uses = models.PositiveIntegerField(null=True, blank=True)
+    times_used = models.PositiveIntegerField(default=0, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        super().save(*args, **kwargs)
+
+    def is_available(self, product=None):
+        now = timezone.now()
+        return bool(
+            self.is_active
+            and (not self.starts_at or self.starts_at <= now)
+            and (not self.expires_at or self.expires_at >= now)
+            and (self.max_uses is None or self.times_used < self.max_uses)
+            and (self.product_id is None or product is None or self.product_id == product.id)
+        )
+
+    def __str__(self):
+        return self.code
 
 
 class IncomingSms(models.Model):

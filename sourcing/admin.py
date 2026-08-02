@@ -300,7 +300,7 @@ class DeliveredAccountInline(admin.TabularInline):
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = ("id", "product", "buyer_type", "quantity", "status",
-                    "source", "fulfilled_bot", "sell_amount_pkr",
+                    "source", "fulfilled_bot", "sell_amount_pkr", "promo_code",
                     "canboso_order_code", "created_at")
     list_filter = ("status", "source", "buyer_type", "fulfilled_bot")
     search_fields = ("id", "product__title", "customer_email",
@@ -308,7 +308,7 @@ class OrderAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
     inlines = [DeliveredAccountInline]
     readonly_fields = ("idempotency_key", "user", "product", "quantity",
-                       "buyer_type", "customer_email", "slot_months", "source",
+                       "buyer_type", "customer_email", "slot_months", "promo_code", "source",
                        "fulfilled_bot", "sell_amount_pkr", "cost_amount",
                        "cost_currency", "canboso_order_code", "error_message",
                        "raw_response", "created_at", "updated_at")

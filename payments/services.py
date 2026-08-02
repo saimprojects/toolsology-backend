@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 
 from django.db import transaction
 from django.utils import timezone
@@ -11,7 +11,7 @@ from sourcing.models import Order, ProductSourceLink, StockOffer
 from sourcing import purchase_engine
 
 from .binance import BinanceError, find_pay_transaction, find_successful_deposit, pkr_to_coin
-from .models import BinanceDeposit, IncomingSms, PaymentMethod
+from .models import BinanceDeposit, IncomingSms, PaymentMethod, PromoCode
 from .parser import normalize_trx, parse_sms
 
 
@@ -45,6 +45,27 @@ class PaymentError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def promo_price_for_offer(*, product, offer_token, promo_code, quantity=1):
+    """Return (promo, regular_total, promo_total) from platform cost + promo markup."""
+    code = str(promo_code or "").strip().upper()
+    if not code:
+        return None, None, None
+    promo = PromoCode.objects.filter(code=code).first()
+    if not promo or not promo.is_available(product):
+        raise PaymentError("invalid_promo", "Promo code is invalid, expired or no longer available.")
+    kind, obj = resolve_offer(product, offer_token)
+    if obj is None:
+        raise PaymentError("invalid_offer", "Selected plan is not available.")
+    regular = obj.price_for("retail")
+    base = obj.cost_pkr() if kind == "bot" else obj.reseller_price
+    if base is None or regular is None:
+        raise PaymentError("promo_unavailable", "Promo pricing is unavailable for this plan.")
+    unit = (base * (Decimal("1") + promo.markup_percent / Decimal("100"))
+            + promo.markup_flat_pkr).quantize(Decimal("1"), rounding=ROUND_CEILING)
+    qty = Decimal(quantity)
+    return promo, (regular * qty).quantize(Decimal("0.01")), (unit * qty).quantize(Decimal("0.01"))
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +107,7 @@ def verify_and_fulfill(
     slot_months: int | None = None,
     user=None,
     payment_type: str = "local",
+    promo_code: str = "",
 ) -> Order:
     """Match a trx id to an unconsumed SMS, then buy the CHOSEN offer.
 
@@ -110,7 +132,12 @@ def verify_and_fulfill(
     if not in_stock:
         raise PaymentError("out_of_stock", "This plan is out of stock.")
 
+    promo = None
     expected_total = (unit_price * Decimal(quantity)).quantize(Decimal("0.01"))
+    if buyer_type == "retail" and promo_code:
+        promo, _, expected_total = promo_price_for_offer(
+            product=product, offer_token=offer_id, promo_code=promo_code, quantity=quantity,
+        )
 
     if payment_type in {"binance", "binance_id"}:
         if BinanceDeposit.objects.filter(tx_id__iexact=trx_id.strip()).exists():
@@ -131,6 +158,10 @@ def verify_and_fulfill(
             )
 
         with transaction.atomic():
+            if promo:
+                promo = PromoCode.objects.select_for_update().get(pk=promo.pk)
+                if not promo.is_available(product):
+                    raise PaymentError("invalid_promo", "Promo code is no longer available.")
             if BinanceDeposit.objects.select_for_update().filter(tx_id__iexact=trx_id.strip()).exists():
                 raise PaymentError("already_used", "This Binance TxID has already been used.")
             order, _ = purchase_engine.get_or_create_order(
@@ -139,7 +170,11 @@ def verify_and_fulfill(
                 slot_months=slot_months, offer_label=obj.label(),
             )
             order.sell_amount_pkr = expected_total
-            order.save(update_fields=["sell_amount_pkr"])
+            order.promo_code = promo.code if promo else ""
+            order.save(update_fields=["sell_amount_pkr", "promo_code"])
+            if promo:
+                promo.times_used += 1
+                promo.save(update_fields=["times_used"])
             BinanceDeposit.objects.create(
                 tx_id=str(deposit_data.get("txId") or deposit_data.get("transactionId") or trx_id).strip(),
                 coin=str(deposit_data.get("coin") or deposit_data.get("currency", "USDT")),
@@ -156,6 +191,10 @@ def verify_and_fulfill(
         return order
 
     with transaction.atomic():
+        if promo:
+            promo = PromoCode.objects.select_for_update().get(pk=promo.pk)
+            if not promo.is_available(product):
+                raise PaymentError("invalid_promo", "Promo code is no longer available.")
         sms = (
             IncomingSms.objects
             .select_for_update(skip_locked=True)
@@ -188,7 +227,11 @@ def verify_and_fulfill(
             offer_label=obj.label(),
         )
         order.sell_amount_pkr = expected_total
-        order.save(update_fields=["sell_amount_pkr"])
+        order.promo_code = promo.code if promo else ""
+        order.save(update_fields=["sell_amount_pkr", "promo_code"])
+        if promo:
+            promo.times_used += 1
+            promo.save(update_fields=["times_used"])
 
         sms.is_consumed = True
         sms.consumed_at = timezone.now()

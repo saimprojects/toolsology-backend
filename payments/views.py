@@ -15,7 +15,7 @@ from .serializers import (
     OrderResultSerializer,
     PaymentMethodSerializer,
 )
-from .services import PaymentError, store_incoming_sms, verify_and_fulfill
+from .services import PaymentError, promo_price_for_offer, store_incoming_sms, verify_and_fulfill
 from .binance import currency_config, public_config
 
 
@@ -39,6 +39,22 @@ class CurrencyConfigView(APIView):
 
     def get(self, request):
         return Response(currency_config())
+
+
+class PromoPreviewView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        product = get_object_or_404(Product, pk=request.data.get("product_id"), status=True)
+        try:
+            promo, regular, adjusted = promo_price_for_offer(
+                product=product, offer_token=request.data.get("offer_id"),
+                promo_code=request.data.get("promo_code"), quantity=1,
+            )
+        except PaymentError as exc:
+            return Response({"code": exc.code, "detail": exc.message}, status=400)
+        return Response({"code": promo.code, "regular_price": regular, "payable_price": adjusted,
+                         "pricing_rule": "platform_cost_plus_promo_markup"})
 
 
 class SmsWebhookView(APIView):
@@ -100,6 +116,7 @@ class _BaseCheckoutView(APIView):
                 slot_months=v.get("slot_months"),
                 user=request.user if request.user.is_authenticated else None,
                 payment_type=v.get("payment_type", "local"),
+                promo_code=v.get("promo_code", ""),
             )
         except PaymentError as exc:
             return Response({"code": exc.code, "detail": exc.message},

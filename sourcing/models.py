@@ -518,6 +518,7 @@ class Order(models.Model):
         max_length=10, choices=BuyerType.choices, default=BuyerType.RETAIL
     )
     customer_email = models.EmailField(blank=True, default="")
+    promo_code = models.CharField(max_length=40, blank=True, default="")
     slot_months = models.PositiveIntegerField(null=True, blank=True)
 
     status = models.CharField(

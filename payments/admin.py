@@ -1,7 +1,20 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import BinanceDeposit, IncomingSms, PaymentMethod
+from .models import BinanceDeposit, IncomingSms, PaymentMethod, PromoCode
+
+
+@admin.register(PromoCode)
+class PromoCodeAdmin(admin.ModelAdmin):
+    list_display = ("code", "product", "markup_percent", "markup_flat_pkr", "is_active", "times_used", "max_uses", "expires_at")
+    list_filter = ("is_active", "starts_at", "expires_at")
+    search_fields = ("code", "product__title")
+    readonly_fields = ("times_used", "created_at")
+    fieldsets = (
+        ("Code", {"fields": ("code", "product", "is_active")}),
+        ("Price = platform cost + promo markup", {"fields": ("markup_percent", "markup_flat_pkr")}),
+        ("Availability", {"fields": ("starts_at", "expires_at", "max_uses", "times_used", "created_at")}),
+    )
 
 
 @admin.register(PaymentMethod)

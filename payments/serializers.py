@@ -30,6 +30,7 @@ class CheckoutSerializer(serializers.Serializer):
     idempotency_key = serializers.CharField(max_length=64)
     customer_email = serializers.EmailField(required=False, allow_blank=True, default="")
     slot_months = serializers.IntegerField(required=False, allow_null=True, default=None)
+    promo_code = serializers.CharField(max_length=40, required=False, allow_blank=True, default="")
 
 
 class DeliveredAccountSerializer(serializers.ModelSerializer):
