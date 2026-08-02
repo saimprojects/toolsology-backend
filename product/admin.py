@@ -36,12 +36,14 @@ class ReviewInline(admin.TabularInline):
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
         "title",
+        "slug",
         "images_count",
         "status",
         "created_at",
     )
     list_filter = ("status", "categories")
-    search_fields = ("title",)
+    search_fields = ("title", "slug", "seo_title", "meta_description")
+    prepopulated_fields = {"slug": ("title",)}
     filter_horizontal = ("categories",)
     inlines = [
         ProductImageInline,
@@ -52,7 +54,8 @@ class ProductAdmin(admin.ModelAdmin):
     # Admin now manages only title + description (+ notes, category, status).
     # Pricing/plans are handled per-offer in Sourcing → Product Sourcing.
     fieldsets = (
-        (None, {"fields": ("title", "description", "notes", "categories", "status")}),
+        (None, {"fields": ("title", "slug", "description", "notes", "categories", "status")}),
+        ("SEO & Answer Engine", {"fields": ("seo_title", "meta_description")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
     readonly_fields = ("created_at", "updated_at")

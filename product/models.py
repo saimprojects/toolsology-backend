@@ -27,6 +27,9 @@ class Category(models.Model):
 
 class Product(models.Model):
     title = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=280, unique=True, blank=True)
+    seo_title = models.CharField(max_length=70, blank=True, default="")
+    meta_description = models.CharField(max_length=170, blank=True, default="")
     description = RichTextField()
     notes = RichTextField(blank=True, default="")
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -34,6 +37,16 @@ class Product(models.Model):
     status = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base = slugify(self.title)[:250] or "digital-tool"
+            candidate, number = base, 2
+            while Product.objects.exclude(pk=self.pk).filter(slug=candidate).exists():
+                candidate = f"{base[:245]}-{number}"
+                number += 1
+            self.slug = candidate
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.title

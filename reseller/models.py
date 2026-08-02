@@ -5,6 +5,8 @@ from decimal import Decimal
 from django.conf import settings as dj_settings
 from django.db import models
 from django.utils import timezone
+import hashlib
+import secrets
 
 from sourcing.models import SourcingSettings
 
@@ -103,3 +105,37 @@ class WalletTransaction(models.Model):
 
     def __str__(self) -> str:
         return f"{self.reseller.user.username} {self.kind} {self.amount}"
+
+
+class ResellerApiKey(models.Model):
+    reseller = models.ForeignKey(Reseller, related_name="api_keys", on_delete=models.CASCADE)
+    name = models.CharField(max_length=80, default="Primary")
+    prefix = models.CharField(max_length=12, db_index=True)
+    key_hash = models.CharField(max_length=64, unique=True)
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @classmethod
+    def issue(cls, reseller, name="Primary"):
+        raw = "tsk_live_" + secrets.token_urlsafe(32)
+        obj = cls.objects.create(
+            reseller=reseller, name=name, prefix=raw[:12],
+            key_hash=hashlib.sha256(raw.encode()).hexdigest(),
+        )
+        return obj, raw
+
+    @classmethod
+    def authenticate(cls, raw):
+        if not raw:
+            return None
+        digest = hashlib.sha256(raw.encode()).hexdigest()
+        return cls.objects.select_related("reseller", "reseller__user").filter(
+            prefix=raw[:12], key_hash=digest, is_active=True
+        ).first()
+
+    def __str__(self):
+        return f"{self.reseller.user.username} · {self.name} · {self.prefix}…"

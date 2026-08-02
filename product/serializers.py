@@ -51,7 +51,10 @@ class ProductPlanSerializer(serializers.ModelSerializer):
         model = ProductPlan
         fields = [
             'id',
+            'slug',
             'title',
+            'seo_title',
+            'meta_description',
             'duration_months',
             'price',
         ]

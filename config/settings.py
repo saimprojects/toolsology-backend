@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "payments.apps.PaymentsConfig",
     "reseller.apps.ResellerConfig",
     "customer.apps.CustomerConfig",
+    "blog.apps.BlogConfig",
 ]
 
 # Shared secret the Android SMS-forwarder must send (?token=... or
@@ -94,6 +95,7 @@ USD_TO_PKR_RATE = os.environ.get(
 )
 BINANCE_PKR_PER_USDT = USD_TO_PKR_RATE
 BINANCE_PAYMENT_ENABLED = os.environ.get("BINANCE_PAYMENT_ENABLED", "False") == "True"
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://www.toolsology.shop").rstrip("/")
 
 # =========================
 # MIDDLEWARE

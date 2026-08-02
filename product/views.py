@@ -1,6 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets, permissions
+from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
 from .models import Category, Product, Review, WhatsAppSettings, ProductPlan
 from .serializers import (
     CategorySerializer,
@@ -47,6 +49,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.request.method in permissions.SAFE_METHODS:
             qs = qs.filter(status=True)
         return qs
+
+    @action(detail=False, methods=["get"], url_path=r"by-slug/(?P<slug>[-\w]+)")
+    def by_slug(self, request, slug=None):
+        product = get_object_or_404(self.get_queryset(), slug=slug)
+        return Response(self.get_serializer(product).data)
 
 
 class ReviewViewSet(viewsets.ModelViewSet):

@@ -51,7 +51,10 @@ class _BaseSourcingList(APIView):
         img = product.images.filter(is_main=True).first() or product.images.first()
         return {
             "id": product.id,
+            "slug": product.slug,
             "title": product.title,
+            "seo_title": product.seo_title,
+            "meta_description": product.meta_description,
             "description": product.description,
             "categories": [{"id": c.id, "name": c.name, "slug": c.slug}
                            for c in product.categories.all()],

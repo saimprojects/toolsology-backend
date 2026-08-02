@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.utils import timezone
 
-from .models import Reseller, WalletTransaction
+from .models import Reseller, ResellerApiKey, WalletTransaction
 
 
 class WalletTransactionInline(admin.TabularInline):
@@ -57,6 +57,14 @@ class WalletTransactionAdmin(admin.ModelAdmin):
     search_fields = ("reseller__user__username", "note")
     readonly_fields = ("reseller", "kind", "amount", "balance_after", "order",
                        "sms", "note", "created_at")
+
+
+@admin.register(ResellerApiKey)
+class ResellerApiKeyAdmin(admin.ModelAdmin):
+    list_display = ("reseller", "name", "prefix", "is_active", "last_used_at", "created_at")
+    list_filter = ("is_active", "created_at")
+    search_fields = ("reseller__user__username", "name", "prefix")
+    readonly_fields = ("key_hash", "prefix", "last_used_at", "created_at")
 
     def has_add_permission(self, request):
         return False

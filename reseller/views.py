@@ -11,7 +11,10 @@ from payments.serializers import OrderResultSerializer
 from product.models import Product
 from sourcing.models import Order
 
-from .models import WalletTransaction
+from .models import ResellerApiKey, WalletTransaction
+from .authentication import ResellerApiKeyAuthentication
+from sourcing.models import ProductSourcing, StockOffer
+from sourcing.pricing import offer_summary
 from .serializers import (
     RegisterSerializer,
     ResellerMeSerializer,
@@ -125,3 +128,85 @@ class OrdersListView(ListAPIView):
         return (Order.objects.filter(user=self.request.user)
                 .select_related("product")
                 .prefetch_related("delivered_accounts"))
+
+
+class DeveloperKeysView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        reseller = get_or_create_reseller(request.user)
+        return Response([{
+            "id": key.id, "name": key.name, "prefix": key.prefix,
+            "is_active": key.is_active, "created_at": key.created_at,
+            "last_used_at": key.last_used_at,
+        } for key in reseller.api_keys.all()])
+
+    def post(self, request):
+        reseller = get_or_create_reseller(request.user)
+        if not reseller.can_operate:
+            return Response({"detail": "Activate your reseller account first."}, status=400)
+        active_count = reseller.api_keys.filter(is_active=True).count()
+        if active_count >= 3:
+            return Response({"detail": "Maximum 3 active API keys allowed."}, status=400)
+        key, raw = ResellerApiKey.issue(reseller, str(request.data.get("name", "Primary"))[:80])
+        return Response({"id": key.id, "name": key.name, "prefix": key.prefix, "api_key": raw}, status=201)
+
+
+class DeveloperKeyRevokeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk):
+        reseller = get_or_create_reseller(request.user)
+        key = get_object_or_404(ResellerApiKey, pk=pk, reseller=reseller)
+        key.is_active = False
+        key.save(update_fields=["is_active"])
+        return Response(status=204)
+
+
+class _ExternalApiView(APIView):
+    authentication_classes = [ResellerApiKeyAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class ExternalProductsView(_ExternalApiView):
+    def get(self, request):
+        products = Product.objects.filter(status=True).prefetch_related("images", "stock_offers")
+        data = []
+        for product in products:
+            price, in_stock = offer_summary(product, "reseller")
+            if price is None:
+                continue
+            data.append({"id": product.id, "slug": product.slug, "name": product.title,
+                         "price_pkr": str(price), "in_stock": in_stock})
+        return Response({"data": data})
+
+
+class ExternalPurchaseView(_ExternalApiView):
+    def post(self, request):
+        reseller = request.reseller
+        slug = str(request.data.get("product_slug", ""))
+        product = get_object_or_404(Product, slug=slug, status=True)
+        offer_id = request.data.get("offer_id")
+        if not offer_id:
+            return Response({"detail": "offer_id is required."}, status=400)
+        idem = request.headers.get("Idempotency-Key", "")
+        if not idem:
+            return Response({"detail": "Idempotency-Key header is required."}, status=400)
+        try:
+            order = purchase_from_wallet(
+                reseller, product=product, offer_id=str(offer_id),
+                quantity=max(1, int(request.data.get("quantity", 1))),
+                idempotency_key=idem[:64], customer_email=str(request.data.get("customer_email", "")),
+            )
+        except (WalletError, ValueError) as exc:
+            return Response({"detail": getattr(exc, "message", str(exc)), "code": getattr(exc, "code", "bad_request")}, status=400)
+        return Response(OrderResultSerializer(order).data)
+
+
+class ExternalOrdersView(_ExternalApiView):
+    def get(self, request):
+        orders = Order.objects.filter(user=request.user).select_related("product").order_by("-created_at")[:100]
+        return Response({"data": [{"id": o.id, "product": o.product.title,
+                                    "status": o.status, "quantity": o.quantity,
+                                    "amount_pkr": str(o.sell_amount_pkr), "created_at": o.created_at}
+                                   for o in orders]})

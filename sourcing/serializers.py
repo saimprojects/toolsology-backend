@@ -17,6 +17,7 @@ class PublicSourcingProductSerializer(serializers.Serializer):
     """
 
     id = serializers.IntegerField(source="product.id")
+    slug = serializers.CharField(source="product.slug")
     title = serializers.CharField(source="product.title")
     description = serializers.CharField(source="product.description")
     categories = serializers.SerializerMethodField()

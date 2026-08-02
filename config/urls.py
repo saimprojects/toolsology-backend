@@ -7,8 +7,10 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from blog.sitemap import sitemap_xml
 
 urlpatterns = [
+    path('sitemap.xml', sitemap_xml, name='sitemap'),
     path('admin/', admin.site.urls),
     # API endpoints from product app
     path('api/', include('product.urls')),
@@ -20,6 +22,7 @@ urlpatterns = [
     path('api/reseller/', include('reseller.urls')),
     # Customer accounts (signup, orders)
     path('api/customer/', include('customer.urls')),
+    path('api/blog/', include('blog.urls')),
     # JWT authentication endpoints
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
