@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path
@@ -18,6 +20,42 @@ from .models import (
     SupplierProduct,
 )
 from .services import auto_match, sync_bot
+
+
+class SupplierProductChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        stock = "Unlimited" if obj.available is None else str(obj.available)
+        price = f"${obj.usd_pricing}" if obj.usd_pricing is not None else "No price"
+        return f"{obj.name} — {obj.bot.name} · {price} · Stock: {stock}"
+
+
+class ProductSourcingAdminForm(forms.ModelForm):
+    selected_bot_products = SupplierProductChoiceField(
+        queryset=SupplierProduct.objects.none(),
+        required=False,
+        label="Available and selected bot products",
+        widget=FilteredSelectMultiple("bot products", is_stacked=False),
+        help_text=(
+            "Double-click a product (or use the arrows) to move it to Selected. "
+            "Save this page and it will appear as an editable row in Product ↔ Bot Links."
+        ),
+    )
+
+    class Meta:
+        model = ProductSourcing
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["selected_bot_products"].queryset = (
+            SupplierProduct.objects.filter(bot__is_active=True)
+            .select_related("bot")
+            .order_by("bot__priority", "bot__name", "name", "usd_pricing")
+        )
+        if self.instance and self.instance.pk:
+            self.initial["selected_bot_products"] = list(
+                self.instance.links.values_list("supplier_product_id", flat=True)
+            )
 
 
 class SupplierProductInline(admin.TabularInline):
@@ -151,6 +189,7 @@ class ProductSourceLinkInline(admin.TabularInline):
 
 @admin.register(ProductSourcing)
 class ProductSourcingAdmin(admin.ModelAdmin):
+    form = ProductSourcingAdminForm
     list_display = ("product", "show_on_retail", "show_on_reseller",
                     "linked_bots", "retail_price_display", "reseller_price_display")
     list_editable = ("show_on_retail", "show_on_reseller")
@@ -162,6 +201,13 @@ class ProductSourcingAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("product", "auto_match_enabled",
                            "show_on_retail", "show_on_reseller")}),
+        ("Choose bot products", {
+            "fields": ("selected_bot_products",),
+            "description": (
+                "Choose the exact supplier offers for this store product. "
+                "Double-click to move products between Available and Selected."
+            ),
+        }),
         ("Commission (added on top of bot cost)", {
             "fields": ("retail_margin_percent", "retail_commission_flat",
                        "reseller_margin_percent", "reseller_commission_flat"),
@@ -169,6 +215,30 @@ class ProductSourcingAdmin(admin.ModelAdmin):
                            "default. Applies to every offer of this product.",
         }),
     )
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        selected_ids = set(
+            form.cleaned_data.get("selected_bot_products", []).values_list("pk", flat=True)
+        )
+        existing_ids = set(
+            form.instance.links.values_list("supplier_product_id", flat=True)
+        )
+
+        # Existing selected rows keep their custom display name, description,
+        # quantity and enabled state. Only genuinely new/removed choices change.
+        form.instance.links.filter(
+            supplier_product__bot__is_active=True,
+            supplier_product_id__in=existing_ids - selected_ids,
+        ).delete()
+        ProductSourceLink.objects.bulk_create([
+            ProductSourceLink(
+                product_sourcing=form.instance,
+                supplier_product_id=product_id,
+                match_type=ProductSourceLink.MatchType.MANUAL,
+            )
+            for product_id in selected_ids - existing_ids
+        ], ignore_conflicts=True)
 
     @admin.action(description="Show on retail + reseller")
     def show_on_both(self, request, queryset):
