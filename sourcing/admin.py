@@ -26,7 +26,9 @@ class SupplierProductChoiceField(forms.ModelMultipleChoiceField):
     def label_from_instance(self, obj):
         stock = "Unlimited" if obj.available is None else str(obj.available)
         price = f"${obj.usd_pricing}" if obj.usd_pricing is not None else "No price"
-        return f"{obj.name} — {obj.bot.name} · {price} · Stock: {stock}"
+        # Keep a stable marker so our admin search can match only the product
+        # title while still displaying useful supplier metadata.
+        return f"{obj.name} [Bot: {obj.bot.name} | {price} | Stock: {stock}]"
 
 
 class ProductSourcingAdminForm(forms.ModelForm):
@@ -44,6 +46,9 @@ class ProductSourcingAdminForm(forms.ModelForm):
     class Meta:
         model = ProductSourcing
         fields = "__all__"
+
+    class Media:
+        js = ("sourcing/js/product_selector_filter.js",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
