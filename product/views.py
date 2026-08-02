@@ -44,7 +44,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related('images', 'reviews', 'categories')
+        qs = super().get_queryset().prefetch_related('images', 'reviews', 'categories', 'plans').order_by('-created_at', '-id')
         # Only return active products for public GET requests
         if self.request.method in permissions.SAFE_METHODS:
             qs = qs.filter(status=True)
