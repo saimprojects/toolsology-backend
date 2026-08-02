@@ -57,6 +57,10 @@ class MeView(APIView):
 
     def get(self, request):
         reseller = get_or_create_reseller(request.user)
+        was_active = reseller.is_activated
+        reseller.refresh_activation()
+        if reseller.is_activated != was_active:
+            reseller.save(update_fields=["is_activated", "activated_at"])
         return Response(ResellerMeSerializer(reseller).data)
 
 
