@@ -19,6 +19,6 @@ router.register(r"plans", ProductPlanViewSet, basename="plan")
 
 
 urlpatterns = [
-    *router.urls,  # ✅ all router-based endpoints
+    *router.urls,  # ✅ all router-based endpoints ok
     path("whatsapp/", WhatsAppSettingsPublicView.as_view(), name="whatsapp-settings"),
 ]
