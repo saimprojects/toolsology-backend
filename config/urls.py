@@ -4,13 +4,21 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.staticfiles import views as staticfiles_views
+from django.http import JsonResponse
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 from blog.sitemap import sitemap_xml
 
+
+def health_check(request):
+    """Lightweight Railway health check with no database dependency."""
+    return JsonResponse({"status": "ok"})
+
+
 urlpatterns = [
+    path("health/", health_check, name="health-check"),
     # Railway can override the repository start command and skip collectstatic.
     # Keep a production fallback so admin/Jazzmin assets still resolve through
     # Django's static-file finders instead of leaving the admin unstyled.
