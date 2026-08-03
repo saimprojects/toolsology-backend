@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.staticfiles import views as staticfiles_views
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -10,6 +11,15 @@ from rest_framework_simplejwt.views import (
 from blog.sitemap import sitemap_xml
 
 urlpatterns = [
+    # Railway can override the repository start command and skip collectstatic.
+    # Keep a production fallback so admin/Jazzmin assets still resolve through
+    # Django's static-file finders instead of leaving the admin unstyled.
+    path(
+        "static/<path:path>",
+        staticfiles_views.serve,
+        {"insecure": True},
+        name="static-fallback",
+    ),
     path('sitemap.xml', sitemap_xml, name='sitemap'),
     path('admin/', admin.site.urls),
     # API endpoints from product app
