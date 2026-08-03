@@ -116,6 +116,9 @@ SUPPLIER_SYNC_INTERVAL_SECONDS = max(
 # MIDDLEWARE
 # =========================
 MIDDLEWARE = [
+    # Railway probes the private container with an internal Host header that
+    # must not require broadening ALLOWED_HOSTS for the rest of the app.
+    "config.middleware.RailwayHealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
 
