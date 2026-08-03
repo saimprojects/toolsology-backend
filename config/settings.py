@@ -28,7 +28,10 @@ if not SECRET_KEY:
         "DJANGO_SECRET_KEY is not set in environment variables"
     )
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+# Never expose Django's detailed error pages from this deployed backend.
+# Local frontend development does not require Django DEBUG mode because CORS
+# and the development origins are configured below.
+DEBUG = False
 
 # =========================
 # ALLOWED HOSTS
