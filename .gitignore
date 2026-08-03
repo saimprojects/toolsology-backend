@@ -27,6 +27,3 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-
-# Railway
-railway.toml

@@ -1,1 +1,1 @@
-web: sh -c 'python manage.py sync_supplier_bots --loop & exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile -'
+web: sh -c 'python manage.py collectstatic --noinput && python manage.py migrate --noinput && (python manage.py sync_supplier_bots --loop &) && exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile -'

@@ -190,13 +190,23 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Django 6 uses STORAGES; the legacy DEFAULT_FILE_STORAGE and
+# STATICFILES_STORAGE settings are no longer applied. WhiteNoise serves the
+# collected admin/Jazzmin assets directly from STATIC_ROOT in production.
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # =========================
 # MEDIA / CLOUDINARY
 # =========================
 MEDIA_URL = "/media/"
-DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 CLOUD_NAME = os.environ.get("CLOUD_NAME")
 API_KEY = os.environ.get("API_KEY")
