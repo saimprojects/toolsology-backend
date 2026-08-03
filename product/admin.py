@@ -21,7 +21,7 @@ from .models import (
 
 
 
-#hello
+#hello ok
 # =========================
 # Inline Admins
 # =========================
