@@ -18,6 +18,9 @@ def health_check(request):
 
 
 urlpatterns = [
+    # Some Railway service-level configurations override railway.toml and
+    # probe the application root. Keep both endpoints healthy.
+    path("", health_check, name="root-health-check"),
     path("health/", health_check, name="health-check"),
     # Railway can override the repository start command and skip collectstatic.
     # Keep a production fallback so admin/Jazzmin assets still resolve through
