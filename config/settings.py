@@ -195,14 +195,14 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # Django 6 uses STORAGES; the legacy DEFAULT_FILE_STORAGE and
-# STATICFILES_STORAGE settings are no longer applied. WhiteNoise serves the
-# collected admin/Jazzmin assets directly from STATIC_ROOT in production.
+# STATICFILES_STORAGE settings are no longer applied. Railway starts Gunicorn
+# without collectstatic so this must not depend on a generated manifest.
 STORAGES = {
     "default": {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
 
